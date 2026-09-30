@@ -144,7 +144,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     if let img = r.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
                         let name = "peek\(i)-\(style.rawValue)-\(state).png"
                         try? rep.representation(using: .png, properties: [:])?.write(to: Log.fileURL.deletingLastPathComponent().appendingPathComponent(name))
-                        Log.info("render \(name) outer \(model.outerSize) radius \(model.radius) collar \(model.collarHeight) track \(model.peekingTrack?.title ?? "none") primary \(model.compactFit.ranked.primary?.kind.rawValue ?? "-") visible \(model.compactFit.ranked.visible.map(\.kind.rawValue))")
+                        Log.info("render \(name) ears L\(model.compactFit.ears.leading) R\(model.compactFit.ears.trailing) outer \(model.outerSize) radius \(model.radius) collar \(model.collarHeight) track \(model.peekingTrack?.title ?? "none") primary \(model.compactFit.ranked.primary?.kind.rawValue ?? "-") visible \(model.compactFit.ranked.visible.map(\.kind.rawValue))")
                     }
                 }
             }

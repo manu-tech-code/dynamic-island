@@ -56,7 +56,7 @@ import Testing
         let ranked = RankedActivities(visible: [music])
         let without = IslandMetrics.compactSize(notch: notch, style: .beside, ranked: ranked, backgroundIconLimit: 4)
         let with = IslandMetrics.compactSize(notch: notch, style: .beside, ranked: ranked, backgroundIconLimit: 4, dashboardButton: true)
-        #expect(with.width - without.width == 2 * IslandMetrics.dashboardButton)
+        #expect(with.width - without.width == 2 * (IslandMetrics.dashboardButtonSize + IslandMetrics.glyphSpacing))
     }
 
     @Test func newSettingsRoundTripAndClamp() {
@@ -79,32 +79,12 @@ import Testing
     let notch = CGSize(width: 185, height: 32)
     let apps = (0..<12).map { RunningAppInfo(pid: Int32($0), bundleID: "b\($0)", name: "App \($0)") }
 
-    func fit(_ ranked: RankedActivities, _ scale: Double, limit: Int = 4) -> IslandMetrics.CompactFit {
-        IslandMetrics.fitCompact(notch: notch, style: .beside, ranked: ranked, iconLimit: limit, dashboardButton: false, maxWidth: nil, scale: scale)
-    }
-
-    @Test func widthAppliesToTheCompactIsland() {
+    @Test func widthSettingLeavesTheCompactIslandAlone() {
         let ranked = RankedActivities(visible: [Activity(id: "a", kind: .backgroundApps, payload: .backgroundApps(apps))])
-        let standard = fit(ranked, 1)
-        let narrow = fit(ranked, 0.75)
-        let wide = fit(ranked, 1.35)
-        #expect(narrow.size.width < standard.size.width)
-        #expect(wide.size.width > standard.size.width)
-        #expect(narrow.iconLimit < standard.iconLimit) // icons fold into +N instead of being cut
-        #expect(wide.iconLimit == standard.iconLimit)
-    }
-
-    @Test func singleActivityKeepsItsMinimum() {
-        let music = RankedActivities(visible: [Activity(id: "m", kind: .nowPlaying, payload: .nowPlaying(NowPlayingInfo(title: "x")))])
-        let tiny = fit(music, 0.1)
-        let minEar = IslandMetrics.earOuterPadding + IslandMetrics.glyph + IslandMetrics.earInnerGap
-        #expect(tiny.size.width >= notch.width + 2 * minEar)
-    }
-
-    @Test func hudFollowsTheWidth() {
-        let style = IslandAlert.Style.volume(level: 0.5, muted: false, output: "x")
-        #expect(IslandMetrics.alertSize(for: style, notch: notch, compactStyle: .beside, scale: 0.8).width
-                < IslandMetrics.alertSize(for: style, notch: notch, compactStyle: .beside, scale: 1).width)
+        let sizes = [0.75, 1.0, 1.35].map {
+            IslandMetrics.bodySize(for: .compact, ranked: ranked, expandedKind: nil, context: .init(notch: notch, widthScale: $0))
+        }
+        #expect(Set(sizes.map(\.width)).count == 1) // it fits its content; the width is for open states
     }
 
     @Test func appsGridAdaptsToWidth() {

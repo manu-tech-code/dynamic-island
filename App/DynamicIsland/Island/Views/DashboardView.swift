@@ -35,8 +35,18 @@ struct DashboardView: View {
                     let excluded = Set(s.backgroundApps.excludedBundleIDs)
                     let apps = env.backgroundApps.apps.filter { !excluded.contains($0.bundleID ?? "") }
                     let fit = Self.iconsThatFit(apps.count, in: model.earContentWidth)
-                    AppIconRow(apps: Array(apps.prefix(fit)), size: 20)
-                    if apps.count > fit { OverflowChip(count: apps.count - fit) }
+                    // One button: the icons and "+N" open the Open apps grid.
+                    Button { model.open("backgroundApps") } label: {
+                        HStack(spacing: IslandMetrics.glyphSpacing) {
+                            AppIconRow(apps: Array(apps.prefix(fit)), size: 20, activates: false)
+                            if apps.count > fit { OverflowChip(count: apps.count - fit) }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(env.engine.activity(id: "backgroundApps") == nil)
+                    .help("Show open apps")
+                    .accessibilityLabel("Open apps, \(apps.count)")
                 }
             } trailing: {
                 if env.battery.info.hasBattery {

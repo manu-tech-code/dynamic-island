@@ -21,13 +21,13 @@ import Testing
     }
 
     @Test func belowBandWidensForTheTitle() {
-        let short = IslandMetrics.belowPeekWidth(band: 261, titleWidth: 40, secondaries: 0, overflow: 1, dashboardButton: true, maxWidth: nil)
+        let short = IslandMetrics.belowPeekWidth(band: 261, titleWidth: 40, secondaries: 0, dashboardButton: true, maxWidth: nil)
         #expect(short == CGFloat(261)) // fits already: never narrower
-        let medium = IslandMetrics.belowPeekWidth(band: 261, titleWidth: 150, secondaries: 0, overflow: 1, dashboardButton: true, maxWidth: nil)
+        let medium = IslandMetrics.belowPeekWidth(band: 261, titleWidth: 150, secondaries: 0, dashboardButton: true, maxWidth: nil)
         #expect(medium > 261 && medium < 261 + 160)
-        let long = IslandMetrics.belowPeekWidth(band: 261, titleWidth: 900, secondaries: 0, overflow: 1, dashboardButton: true, maxWidth: nil)
+        let long = IslandMetrics.belowPeekWidth(band: 261, titleWidth: 900, secondaries: 0, dashboardButton: true, maxWidth: nil)
         #expect(long == CGFloat(261 + 160)) // then it scrolls
-        let limited = IslandMetrics.belowPeekWidth(band: 261, titleWidth: 900, secondaries: 0, overflow: 1, dashboardButton: true, maxWidth: 300)
+        let limited = IslandMetrics.belowPeekWidth(band: 261, titleWidth: 900, secondaries: 0, dashboardButton: true, maxWidth: 300)
         #expect(limited == CGFloat(300)) // the user's compact limit wins
     }
 

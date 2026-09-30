@@ -17,7 +17,7 @@ enum IslandMotion {
     /// The title row's fade as it leaves (it rides the shape's spring coming in).
     static let peekRowOut = Animation.easeOut(duration: 0.25)
 
-    /// The dashboard button fading in its room on hover.
+    /// Hover state changes (the virtual notch showing on displays without one).
     static let hover = Animation.easeInOut(duration: 0.3)
 
     /// Content swapping between states: out quickly, in once the shape is moving.
