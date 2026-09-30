@@ -37,11 +37,19 @@ final class IslandViewModel {
 
     var isPreview: Bool { forced != nil }
 
+    #if DEBUG
+    /// Offline renders: a presentation that still behaves live (not a preview).
+    var debugPresentation: IslandPresentation?
+    #endif
+
     var settings: IslandSettings { env.settings.settings }
     var ranked: RankedActivities { env.engine.ranked }
 
     var presentation: IslandPresentation {
         if let forced { return resolvedForced(forced) }
+        #if DEBUG
+        if let debugPresentation { return debugPresentation }
+        #endif
         let engine = env.engine
         if let alert = engine.alert, userState == .none { return .alert(alert) }
         switch userState {
@@ -122,9 +130,26 @@ final class IslandViewModel {
         return info
     }
 
+    /// The device whose name and batteries show under its compact alert, while
+    /// the pointer is on the device's icon.
+    var peekingDevice: BluetoothDeviceInfo? {
+        guard peek, !isPreview, case .alert(let a) = presentation, case .deviceConnected(let d) = a.style, d.hasBattery else { return nil }
+        return d
+    }
+
+    /// Where a peek can open: the track's artwork on the compact island, or a device alert's icon.
+    var allowsPeek: Bool {
+        if presentation == .compact { return true }
+        if case .alert(let a) = presentation, case .deviceConnected = a.style { return true }
+        return false
+    }
+
     private var peekHeight: CGFloat {
-        guard let info = peekingTrack else { return 0 }
-        return IslandMetrics.nowPlayingPeekHeight(style: settings.compactStyle, hasArtist: !info.artist.isEmpty)
+        if let info = peekingTrack {
+            return IslandMetrics.nowPlayingPeekHeight(style: settings.compactStyle, hasArtist: !info.artist.isEmpty)
+        }
+        // A device: its name and a line of batteries, like a title and an artist.
+        return peekingDevice == nil ? 0 : IslandMetrics.nowPlayingPeekHeight(style: settings.compactStyle, hasArtist: true)
     }
 
     /// Height of the Hybrid material's black collar: the notch, plus the title
@@ -153,6 +178,8 @@ final class IslandViewModel {
                                                           dashboardButton: showsDashboardButton,
                                                           maxWidth: settings.compactMaxWidth > 0 ? settings.compactMaxWidth : nil)
             }
+            size.height += peekHeight
+        } else if peekingDevice != nil {
             size.height += peekHeight
         }
         return size
@@ -271,6 +298,7 @@ final class IslandViewModel {
     /// the artwork opens it; once open, the title row keeps it open.
     func isOverMedia(_ point: CGPoint) -> Bool {
         if let art = mediaRects["artwork"], art.insetBy(dx: -5, dy: -5).contains(point) { return true }
+        if let icon = mediaRects["alertIcon"], icon.insetBy(dx: -5, dy: -5).contains(point) { return true }
         if peek, let row = mediaRects["title"], row.insetBy(dx: 0, dy: -3).contains(point) { return true }
         return false
     }
@@ -281,6 +309,8 @@ final class IslandViewModel {
     func setOverMedia(_ on: Bool) {
         guard on != overMedia else { return }
         overMedia = on
+        // A device alert stays up while its details are being read.
+        if case .alert = presentation { on ? env.engine.holdAlert() : env.engine.releaseAlert() }
         peekTask?.cancel()
         peekTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(on ? 60 : 140))

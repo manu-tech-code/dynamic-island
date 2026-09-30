@@ -7,7 +7,7 @@ import SwiftUI
 struct IslandRootView: View {
     let model: IslandViewModel
     /// The panel's coordinate space (top-left origin), for pointer tests.
-    static let space = "island"
+    nonisolated static let space = "island"
 
     var body: some View {
         let size = model.outerSize

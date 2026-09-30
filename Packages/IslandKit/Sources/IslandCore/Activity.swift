@@ -250,6 +250,12 @@ public struct BluetoothDeviceInfo: Equatable, Sendable, Identifiable {
     }
 
     public var hasBattery: Bool { battery != nil || batteryLeft != nil || batteryRight != nil || batteryCase != nil }
+
+    /// The level a single ring shows: the lower earbud for AirPods (as on
+    /// iPhone), else the device's own battery, else the case.
+    public var ringPercent: Int? {
+        [batteryLeft, batteryRight].compactMap { $0 }.min() ?? battery ?? batteryCase
+    }
 }
 
 public enum ActivityPayload: Equatable, Sendable {
@@ -292,6 +298,15 @@ public struct IslandAlert: Identifiable, Equatable, Sendable {
         case brightness(level: Double)
         /// A general note, e.g. the first-run tip.
         case message(title: String, subtitle: String, symbol: String)
+    }
+
+    /// Status alerts show like a compact activity (an icon on the left, a ring on
+    /// the right) instead of a card. Ones with a button stay cards.
+    public var isCompact: Bool {
+        switch style {
+        case .deviceConnected, .deviceDisconnected, .chargerConnected, .chargerDisconnected, .lowBattery: true
+        default: false
+        }
     }
 
     /// HUDs update in place while a key is held, instead of queueing.

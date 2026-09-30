@@ -255,14 +255,38 @@ public enum IslandMetrics {
     /// The shelf, opened by a drag or a click; also the drop target.
     public static let shelf = CGSize(width: 600, height: 216)
 
+    /// Content width of a compact alert's fuller ear: the icon on the left; a
+    /// ring (devices) or the percentage and a ring (power) on the right.
+    public static func compactAlertContent(for style: IslandAlert.Style) -> CGFloat {
+        switch style {
+        case .chargerConnected, .chargerDisconnected, .lowBattery: 34 + glyphSpacing + 18
+        default: glyph
+        }
+    }
+
+    /// The lock indicator while the Mac is locked: a lock in the left ear.
+    public static func lockSize(notch: CGSize) -> CGSize {
+        CGSize(width: notch.width + 2 * (earOuterPadding + glyph + earInnerGap), height: notch.height)
+    }
+
     public static func alertSize(for style: IslandAlert.Style, notch: CGSize = CGSize(width: 185, height: 32),
                                  compactStyle: CompactStyle = .beside) -> CGSize {
+        if IslandAlert(kind: .battery, style: style).isCompact {
+            // Status alerts are compact: ears beside the notch, or a band below it.
+            switch compactStyle {
+            case .beside:
+                let ear = earOuterPadding + compactAlertContent(for: style) + earInnerGap
+                return CGSize(width: notch.width + 2 * ear, height: notch.height)
+            case .below:
+                return CGSize(width: max(notch.width + 24, 280), height: notch.height + belowBand)
+            }
+        }
         switch style {
         case .volume, .brightness:
             // The HUD lives where compact content does.
             let width = compactStyle == .beside ? notch.width + 2 * 116 : max(notch.width + 24, 280)
             return CGSize(width: width, height: compactStyle == .beside ? notch.height : notch.height + belowBand)
-        case .eventStarting, .deviceConnected: return CGSize(width: 460, height: 100)
+        case .eventStarting: return CGSize(width: 460, height: 100)
         case .downloadFinished: return CGSize(width: 460, height: 88)
         case .message: return CGSize(width: 440, height: 88)
         default: return CGSize(width: 400, height: 88)

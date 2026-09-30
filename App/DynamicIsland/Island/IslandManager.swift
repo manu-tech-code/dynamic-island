@@ -112,6 +112,8 @@ final class IslandManager {
 
     /// Returns true when a local event was consumed.
     private func handle(type: NSEvent.EventType, event: NSEvent?) -> Bool {
+        // A locked Mac: the island shows the lock and nothing else, and takes no input.
+        if env.lock.isLocked { return false }
         let p = NSEvent.mouseLocation
         switch type {
         case .mouseMoved:
