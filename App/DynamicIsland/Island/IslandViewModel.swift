@@ -79,7 +79,7 @@ final class IslandViewModel {
     }
 
     /// Width while the user drags a resize handle; committed to settings on release.
-    private(set) var liveWidthScale: Double?
+    var liveWidthScale: Double?
     var widthScale: Double { liveWidthScale ?? settings.openWidthScale }
 
     var dashboardWidth: CGFloat { DashboardLayout.width(scale: widthScale) }
@@ -104,11 +104,18 @@ final class IslandViewModel {
                               compactMaxWidth: settings.compactMaxWidth > 0 ? settings.compactMaxWidth : nil)
     }
 
-    /// What the compact island actually shows once the width limit is applied.
+    /// What the compact island actually shows at the user's width and limit.
     var compactFit: IslandMetrics.CompactFit {
         let c = layoutContext
         return IslandMetrics.fitCompact(notch: c.notch, style: c.style, ranked: ranked, iconLimit: c.iconLimit,
-                                        dashboardButton: c.dashboardButton, maxWidth: c.compactMaxWidth)
+                                        dashboardButton: c.dashboardButton, maxWidth: c.compactMaxWidth, scale: c.widthScale)
+    }
+
+    /// The compact island at the standard width, used to turn a drag into a scale.
+    private var naturalCompactWidth: CGFloat {
+        let c = layoutContext
+        return IslandMetrics.fitCompact(notch: c.notch, style: c.style, ranked: ranked, iconLimit: c.iconLimit,
+                                        dashboardButton: c.dashboardButton, maxWidth: c.compactMaxWidth).size.width
     }
 
     var bodySize: CGSize {
@@ -117,6 +124,8 @@ final class IslandViewModel {
         let kind = expandedActivity?.kind
         if kind == .nowPlaying, nowPlayingPage != .player {
             size = IslandMetrics.scaled(IslandMetrics.nowPlayingDetail, widthScale)
+        } else if kind == .backgroundApps, case .backgroundApps(let apps)? = expandedActivity?.payload {
+            size = IslandMetrics.backgroundAppsExpandedSize(count: apps.count, widthScale: widthScale)
         } else {
             size = IslandMetrics.bodySize(for: p, ranked: ranked, expandedKind: kind, context: layoutContext)
         }
@@ -148,7 +157,28 @@ final class IslandViewModel {
         return "Dynamic Island. " + (parts.isEmpty ? "Nothing live" : parts.joined(separator: ". "))
     }
 
-    /// The standard (scale 1) width of the current open state, for resizing.
+    /// Room for content in each ear of an open state (beside the notch).
+    var earContentWidth: CGFloat {
+        max(0, (bodySize.width - notch.rect.width) / 2 - IslandMetrics.earInnerGap - 18 - IslandMetrics.shoulder)
+    }
+
+    /// Open states narrower than this use their compact layouts.
+    var isNarrow: Bool { bodySize.width < 470 }
+
+    /// How many points of width one unit of scale is worth in the current
+    /// state, for turning a drag into a scale. nil where resizing doesn't apply.
+    var resizeBase: CGFloat? {
+        switch presentation {
+        case .compact:
+            // The ears scale around the notch (beside) or the band scales (below).
+            let natural = naturalCompactWidth
+            return settings.compactStyle == .beside ? max(40, natural - notch.rect.width) : natural
+        case .idle, .alert: return nil
+        default: return baseOpenWidth
+        }
+    }
+
+    /// The standard (scale 1) width of the current open state.
     var baseOpenWidth: CGFloat? {
         switch presentation {
         case .dashboard: return DashboardLayout.width
@@ -163,7 +193,7 @@ final class IslandViewModel {
     /// Drag on a side handle: the island is centred, so each point of drag
     /// changes the width by two.
     func resize(by dx: CGFloat, from start: Double) {
-        guard let base = baseOpenWidth else { return }
+        guard let base = resizeBase else { return }
         let r = IslandSettings.widthScaleRange
         let scale = min(max(start + Double(2 * dx / base), r.lowerBound), r.upperBound)
         var t = Transaction()

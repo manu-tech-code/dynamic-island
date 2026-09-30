@@ -47,7 +47,7 @@ struct IslandRootView: View {
                     }
                 }
                 .overlay {
-                    if model.baseOpenWidth != nil, !model.isPreview { ResizeHandles(model: model) }
+                    if model.resizeBase != nil, !model.isPreview { ResizeHandles(model: model) }
                 }
 
             if !model.notch.isHardware, model.settings.virtualNotchWhenIdle || model.presentation != .idle || model.hover {
@@ -150,12 +150,13 @@ private struct ResizeHandles: View {
             handle(direction: 1)
         }
         .padding(.horizontal, IslandMetrics.shoulder - 2)
-        .padding(.top, model.notch.rect.height)
+        // Open: below the ear row, so its buttons stay clickable. Compact: full height.
+        .padding(.top, model.isOpen ? model.notch.rect.height : 0)
     }
 
     private func handle(direction: CGFloat) -> some View {
         Color.clear
-            .frame(width: 10)
+            .frame(width: model.isOpen ? 10 : 7)
             .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
             .onHover { inside in (inside ? NSCursor.resizeLeftRight : NSCursor.arrow).set() }

@@ -130,6 +130,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     Log.info("weather check: \(Int(r.temperature))° \(r.condition.summary) H\(r.high.map { Int($0) } ?? 0) hours \(r.hours.count)")
                 } else { Log.error("weather check failed") }
             }
+        case "debug-render-widths":
+            // The island at three widths, rendered offline, to check nothing is cut off.
+            let model = IslandViewModel(env: env, notch: NotchRect(rect: CGRect(x: 0, y: 0, width: 185, height: 32), isHardware: false))
+            for scale in [0.75, 1.0, 1.35] {
+                model.liveWidthScale = scale
+                for (name, p) in [("compact", IslandPresentation.compact), ("expanded", .expanded(activityID: "")), ("dashboard", .dashboard)] {
+                    model.forced = p
+                    let r = ImageRenderer(content: PreviewCanvas(model: model, availableWidth: 900).environment(env))
+                    r.scale = 1
+                    if let img = r.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+                        let url = Log.fileURL.deletingLastPathComponent().appendingPathComponent("width-\(name)-\(Int(scale * 100)).png")
+                        try? rep.representation(using: .png, properties: [:])?.write(to: url)
+                    }
+                    Log.info("width \(Int(scale * 100))% \(name): \(Int(model.outerSize.width))×\(Int(model.outerSize.height))")
+                }
+            }
         case "debug-render-widgets":
             let model = IslandViewModel(env: env, notch: NotchRect(rect: CGRect(x: 0, y: 0, width: 185, height: 32), isHardware: false))
             let slot = DashboardLayout.slotWidth(forWidth: DashboardLayout.width)

@@ -69,24 +69,11 @@ private struct TimerExpanded: View {
             Text(timer.label).lineLimit(1).foregroundStyle(.orange)
         }
         TimelineView(.periodic(from: .now, by: 1)) { ctx in
-            HStack(spacing: 16) {
-                Ring(fraction: timer.fractionRemaining(at: ctx.date), color: .orange, lineWidth: 5)
-                    .frame(width: 62, height: 62)
-                    .overlay(Image(systemName: timer.isRunning ? "timer" : "pause.fill").font(.system(size: 18, weight: .semibold)).foregroundStyle(.orange))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(IslandFormat.countdown(timer.remaining(at: ctx.date)))
-                        .font(.system(size: 36, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                        .contentTransition(.numericText(countsDown: true))
-                    Text(timer.isRunning ? "Ends at \(timer.endDate!.formatted(date: .omitted, time: .shortened))" : "Paused")
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 8)
-                IslandCapsuleButton(title: "+1 min") { env.timers.addMinute(timer.id) }
-                IslandIconButton(systemName: timer.isRunning ? "pause.fill" : "play.fill", size: 36, label: timer.isRunning ? "Pause" : "Resume") {
-                    timer.isRunning ? env.timers.pause(timer.id) : env.timers.resume(timer.id)
-                }
-                IslandIconButton(systemName: "xmark", size: 36, label: "Cancel timer") { env.timers.cancel(timer.id) }
+            // The first layout that fits the width wins, so narrow islands
+            // get smaller type and icon-only buttons instead of cut-off ones.
+            ViewThatFits(in: .horizontal) {
+                row(ctx.date, ring: 62, digits: 36, buttons: 36, labeled: true)
+                row(ctx.date, ring: 48, digits: 28, buttons: 30, labeled: false)
             }
         }
         .padding(.horizontal, 18)
@@ -210,6 +197,35 @@ enum BatteryText {
 
 // MARK: Background apps
 
+extension TimerExpanded {
+    fileprivate func row(_ now: Date, ring: CGFloat, digits: CGFloat, buttons: CGFloat, labeled: Bool) -> some View {
+        HStack(spacing: labeled ? 16 : 10) {
+            Ring(fraction: timer.fractionRemaining(at: now), color: .orange, lineWidth: ring > 50 ? 5 : 4)
+                .frame(width: ring, height: ring)
+                .overlay(Image(systemName: timer.isRunning ? "timer" : "pause.fill").font(.system(size: ring * 0.29, weight: .semibold)).foregroundStyle(.orange))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(IslandFormat.countdown(timer.remaining(at: now)))
+                    .font(.system(size: digits, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .contentTransition(.numericText(countsDown: true))
+                    .fixedSize()
+                Text(timer.isRunning ? "Ends at \(timer.endDate!.formatted(date: .omitted, time: .shortened))" : "Paused")
+                    .font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            if labeled {
+                IslandCapsuleButton(title: "+1 min") { env.timers.addMinute(timer.id) }
+            } else {
+                IslandIconButton(systemName: "plus", size: buttons, label: "Add a minute") { env.timers.addMinute(timer.id) }
+            }
+            IslandIconButton(systemName: timer.isRunning ? "pause.fill" : "play.fill", size: buttons, label: timer.isRunning ? "Pause" : "Resume") {
+                timer.isRunning ? env.timers.pause(timer.id) : env.timers.resume(timer.id)
+            }
+            IslandIconButton(systemName: "xmark", size: buttons, label: "Cancel timer") { env.timers.cancel(timer.id) }
+        }
+    }
+}
+
 private struct BackgroundAppsExpanded: View {
     let apps: [RunningAppInfo]
     let model: IslandViewModel
@@ -222,19 +238,31 @@ private struct BackgroundAppsExpanded: View {
         } trailing: {
             Text("\(apps.count)").monospacedDigit()
         }
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 8), spacing: 8) {
-            ForEach(apps.prefix(16)) { app in
+        // Columns follow the island's width; the island grows a row when needed.
+        let grid = IslandMetrics.backgroundAppsGrid(count: apps.count, width: model.bodySize.width)
+        let shown = min(apps.count, grid.columns * 3)
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: grid.columns), spacing: 8) {
+            ForEach(apps.prefix(shown)) { app in
                 Button { env.backgroundApps.activate(app); model.collapse() } label: {
                     VStack(spacing: 3) {
                         AppIcon(app: app, size: 40)
-                        Text(app.name).font(.system(size: 10)).lineLimit(1).foregroundStyle(.secondary)
+                        Text(app.name)
+                            .font(.system(size: 10))
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(.secondary)
+                            .frame(height: 26, alignment: .top)
                     }
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.plain)
+                .help(app.name)
             }
         }
         .padding(.horizontal, 16)
         .padding(.top, 10)
+        if apps.count > shown {
+            Text("and \(apps.count - shown) more").font(.system(size: 10.5)).foregroundStyle(.tertiary).padding(.top, 2)
+        }
     }
 }

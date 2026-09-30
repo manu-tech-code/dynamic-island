@@ -168,6 +168,53 @@ public enum IslandMetrics {
         return CompactFit(ranked: r, iconLimit: limit, size: size)
     }
 
+    /// The compact island at the user's width. The ears scale around the
+    /// notch; narrower folds icons and extra activities into "+N" (content is
+    /// never clipped), wider just gives the ears more room.
+    public static func fitCompact(notch: CGSize, style: CompactStyle, ranked: RankedActivities, iconLimit: Int,
+                                  dashboardButton: Bool, maxWidth: CGFloat?, scale: Double) -> CompactFit {
+        let natural = fitCompact(notch: notch, style: style, ranked: ranked, iconLimit: iconLimit,
+                                 dashboardButton: dashboardButton, maxWidth: maxWidth)
+        guard scale != 1, ranked.primary != nil else { return natural }
+        let target = scaledCompactWidth(natural: natural.size.width, notch: notch, style: style, scale: scale)
+        let cap = maxWidth.map { min($0, target) } ?? target
+        if scale < 1 {
+            var fit = fitCompact(notch: notch, style: style, ranked: ranked, iconLimit: iconLimit,
+                                 dashboardButton: dashboardButton, maxWidth: cap)
+            fit.size.width = max(fit.size.width, cap)
+            return fit
+        }
+        var fit = natural
+        fit.size.width = max(natural.size.width, cap)
+        return fit
+    }
+
+    /// Scales the ears (beside) or the band (below); the notch itself never changes.
+    public static func scaledCompactWidth(natural: CGFloat, notch: CGSize, style: CompactStyle, scale: Double) -> CGFloat {
+        switch style {
+        case .beside:
+            let minEar = earOuterPadding + glyph + earInnerGap
+            let ear = max(0, (natural - notch.width) / 2)
+            return notch.width + 2 * max(minEar, (ear * CGFloat(scale)).rounded())
+        case .below:
+            return max(notch.width + 24, (natural * CGFloat(scale)).rounded())
+        }
+    }
+
+    /// Background apps, expanded: as many columns as fit the width, as many
+    /// rows as the apps need (up to three).
+    public static func backgroundAppsGrid(count: Int, width: CGFloat) -> (columns: Int, rows: Int) {
+        let columns = max(3, Int((width - 32 + 6) / (70 + 6)))
+        let rows = min(3, max(1, Int((Double(min(count, columns * 3)) / Double(columns)).rounded(.up))))
+        return (columns, rows)
+    }
+
+    public static func backgroundAppsExpandedSize(count: Int, widthScale: Double) -> CGSize {
+        let width = expandedSize(for: .backgroundApps, widthScale: widthScale).width
+        let rows = CGFloat(backgroundAppsGrid(count: count, width: width).rows)
+        return CGSize(width: width, height: 32 + 10 + rows * 72 + (rows - 1) * 8 + 16)
+    }
+
     public static func idleSize(notch: CGSize) -> CGSize {
         CGSize(width: notch.width - 2, height: notch.height - 1)
     }
@@ -203,13 +250,13 @@ public enum IslandMetrics {
     public static let shelf = CGSize(width: 600, height: 216)
 
     public static func alertSize(for style: IslandAlert.Style, notch: CGSize = CGSize(width: 185, height: 32),
-                                 compactStyle: CompactStyle = .beside) -> CGSize {
+                                 compactStyle: CompactStyle = .beside, scale: Double = 1) -> CGSize {
         switch style {
         case .volume, .brightness:
-            // The HUD lives where compact content does: in the ears, or in the band below.
-            return compactStyle == .beside
-                ? CGSize(width: notch.width + 2 * 116, height: notch.height)
-                : CGSize(width: max(notch.width + 24, 280), height: notch.height + belowBand)
+            // The HUD lives where compact content does, at the compact width.
+            let natural = compactStyle == .beside ? notch.width + 2 * 116 : max(notch.width + 24, 280)
+            let width = scaledCompactWidth(natural: natural, notch: notch, style: compactStyle, scale: scale)
+            return CGSize(width: width, height: compactStyle == .beside ? notch.height : notch.height + belowBand)
         case .eventStarting, .deviceConnected: return CGSize(width: 460, height: 100)
         case .downloadFinished: return CGSize(width: 460, height: 88)
         case .message: return CGSize(width: 440, height: 88)
@@ -264,13 +311,13 @@ public enum IslandMetrics {
         case .idle: return idleSize(notch: c.notch)
         case .compact:
             return fitCompact(notch: c.notch, style: c.style, ranked: ranked, iconLimit: c.iconLimit,
-                              dashboardButton: c.dashboardButton, maxWidth: c.compactMaxWidth).size
+                              dashboardButton: c.dashboardButton, maxWidth: c.compactMaxWidth, scale: c.widthScale).size
         case .expanded:
             guard let kind = expandedKind else { return dashboardSize(c) }
             return expandedSize(for: kind, widthScale: c.widthScale)
         case .dashboard: return dashboardSize(c)
         case .shelf: return scaled(shelf, c.widthScale)
-        case .alert(let alert): return alertSize(for: alert.style, notch: c.notch, compactStyle: c.style)
+        case .alert(let alert): return alertSize(for: alert.style, notch: c.notch, compactStyle: c.style, scale: c.widthScale)
         }
     }
 

@@ -8,6 +8,15 @@ struct DashboardView: View {
     let model: IslandViewModel
     @Environment(AppEnvironment.self) private var env
 
+    /// App icons that fit in an ear, leaving room for a "+N" chip when some don't.
+    static func iconsThatFit(_ count: Int, in width: CGFloat) -> Int {
+        let step = IslandMetrics.glyph + IslandMetrics.glyphSpacing
+        let all = Int((width + IslandMetrics.glyphSpacing) / step)
+        if count <= all { return count }
+        let chip = IslandMetrics.overflowChipWidth(count) + IslandMetrics.glyphSpacing
+        return max(0, Int((width - chip + IslandMetrics.glyphSpacing) / step))
+    }
+
     static func width(_ size: WidgetSize, dashboardWidth: CGFloat = DashboardLayout.width) -> CGFloat {
         let slot = DashboardLayout.slotWidth(forWidth: dashboardWidth)
         let n = min(size.columns, DashboardLayout.columns(forWidth: dashboardWidth))
@@ -25,8 +34,9 @@ struct DashboardView: View {
                 if s[module: .backgroundApps].enabled {
                     let excluded = Set(s.backgroundApps.excludedBundleIDs)
                     let apps = env.backgroundApps.apps.filter { !excluded.contains($0.bundleID ?? "") }
-                    AppIconRow(apps: Array(apps.prefix(7)), size: 20)
-                    if apps.count > 7 { OverflowChip(count: apps.count - 7) }
+                    let fit = Self.iconsThatFit(apps.count, in: model.earContentWidth)
+                    AppIconRow(apps: Array(apps.prefix(fit)), size: 20)
+                    if apps.count > fit { OverflowChip(count: apps.count - fit) }
                 }
             } trailing: {
                 if env.battery.info.hasBattery {
@@ -365,6 +375,13 @@ struct Sparkline: View {
         GeometryReader { g in
             let pts = points(in: g.size)
             ZStack {
+                // A faint baseline across the full width, so a history that is
+                // still filling in doesn't look cut off.
+                Path { p in
+                    p.move(to: CGPoint(x: 0, y: g.size.height - 0.5))
+                    p.addLine(to: CGPoint(x: g.size.width, y: g.size.height - 0.5))
+                }
+                .stroke(color.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [2, 3]))
                 if fill, pts.count > 1 {
                     Path { p in
                         p.move(to: CGPoint(x: pts[0].x, y: g.size.height))

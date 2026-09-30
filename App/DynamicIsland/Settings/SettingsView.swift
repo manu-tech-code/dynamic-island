@@ -221,7 +221,7 @@ private struct LayoutPane: View {
             }
 
             Section {
-                LabeledContent("Width when open") {
+                LabeledContent("Width") {
                     HStack {
                         Slider(value: $store.settings.openWidthScale, in: IslandSettings.widthScaleRange, step: 0.05) {
                             EmptyView()
@@ -247,7 +247,7 @@ private struct LayoutPane: View {
             } header: {
                 Text("Size")
             } footer: {
-                Text("You can also drag the left or right edge of the open island to resize it. When the compact island hits its limit, extra app icons and activities fold into +N. The dashboard button opens the dashboard in one click.")
+                Text("Applies to the compact and the open island. You can also drag the island's left or right edge. When there isn't room, extra app icons and activities fold into +N instead of being cut off. The dashboard button opens the dashboard in one click.")
             }
 
             Section {

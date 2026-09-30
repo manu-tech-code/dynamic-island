@@ -22,15 +22,23 @@ struct ShelfView: View {
                 }
             } trailing: {
                 if !items.isEmpty {
-                    IslandIconButton(systemName: "airdrop", size: 26, label: "AirDrop \(targets.count == 1 ? "item" : "\(targets.count) items")") {
-                        shelf.airDrop(targets)
-                    }
-                    IslandIconButton(systemName: "square.and.arrow.up", size: 26, label: "Share") {
-                        model.presentMenu(shelf.shareMenu(for: targets))
-                    }
-                    IslandIconButton(systemName: "folder", size: 26, label: "Show in Finder") { shelf.reveal(targets) }
-                    IslandIconButton(systemName: "trash", size: 26, label: shelf.selection.isEmpty ? "Clear shelf" : "Remove selected") {
-                        withAnimation(.snappy) { shelf.selection.isEmpty ? shelf.clear() : shelf.remove(shelf.selection) }
+                    // Four buttons where they fit, one menu where they don't.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 6) {
+                            IslandIconButton(systemName: "airdrop", size: 26, label: "AirDrop \(targets.count == 1 ? "item" : "\(targets.count) items")") {
+                                shelf.airDrop(targets)
+                            }
+                            IslandIconButton(systemName: "square.and.arrow.up", size: 26, label: "Share") {
+                                model.presentMenu(shelf.shareMenu(for: targets))
+                            }
+                            IslandIconButton(systemName: "folder", size: 26, label: "Show in Finder") { shelf.reveal(targets) }
+                            IslandIconButton(systemName: "trash", size: 26, label: shelf.selection.isEmpty ? "Clear shelf" : "Remove selected") {
+                                withAnimation(.snappy) { shelf.selection.isEmpty ? shelf.clear() : shelf.remove(shelf.selection) }
+                            }
+                        }
+                        IslandIconButton(systemName: "ellipsis.circle", size: 26, label: "Shelf actions") {
+                            model.presentMenu(actionsMenu(targets))
+                        }
                     }
                 }
             }
@@ -52,6 +60,21 @@ struct ShelfView: View {
             .padding(.bottom, 14)
         }
         .padding(.horizontal, IslandMetrics.shoulder)
+    }
+}
+
+extension ShelfView {
+    fileprivate func actionsMenu(_ targets: [ShelfItemInfo]) -> NSMenu {
+        let shelf = env.shelf
+        let menu = NSMenu()
+        menu.addItem(ClosureMenuItem.make(title: "AirDrop", symbol: "airdrop", checked: false) { shelf.airDrop(targets) })
+        menu.addItem(ClosureMenuItem.make(title: "Show in Finder", symbol: "folder", checked: false) { shelf.reveal(targets) })
+        for item in shelf.shareMenu(for: targets).items { menu.addItem(item.copy() as! NSMenuItem) }
+        menu.addItem(.separator())
+        menu.addItem(ClosureMenuItem.make(title: shelf.selection.isEmpty ? "Clear Shelf" : "Remove Selected", symbol: "trash", checked: false) {
+            shelf.selection.isEmpty ? shelf.clear() : shelf.remove(shelf.selection)
+        })
+        return menu
     }
 }
 

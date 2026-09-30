@@ -34,23 +34,18 @@ private struct PlayerPage: View {
 
     var body: some View {
         let np = env.nowPlaying
+        Group {
+            if model.isNarrow { narrow } else { wide }
+        }
+        .onAppear { np.wantQueue() }
+        .onDisappear { np.releaseQueue() }
+    }
+
+    /// Standard width: controls beside the title.
+    @ViewBuilder private var wide: some View {
         HStack(spacing: 14) {
-            Button { np.openSourceApp() } label: {
-                ArtworkView(image: np.artwork, size: 80, radius: 18)
-                    .shadow(color: .black.opacity(0.25), radius: 10, y: 5)
-            }
-            .buttonStyle(.plain)
-            .help("Open \(np.sourceApp?.localizedName ?? "player")")
-            VStack(alignment: .leading, spacing: 3) {
-                Text(info.title).font(.system(size: 16, weight: .semibold)).lineLimit(1)
-                Text([info.artist, info.album].filter { !$0.isEmpty }.joined(separator: " · "))
-                    .font(.system(size: 13)).foregroundStyle(.secondary).lineLimit(1)
-                if model.settings.nowPlaying.showUpNext, let next = np.queue?.upNext {
-                    Text("Up next · \(next.title)")
-                        .font(.system(size: 11.5, weight: .medium)).foregroundStyle(.tertiary).lineLimit(1)
-                        .padding(.top, 2)
-                }
-            }
+            artwork(80, radius: 18)
+            titles(size: 16)
             Spacer(minLength: 8)
             TransportControls(info: info, sizes: (34, 44))
         }
@@ -59,17 +54,64 @@ private struct PlayerPage: View {
         Spacer(minLength: 0)
         HStack(spacing: 8) {
             PositionRow(info: info)
-            HStack(spacing: 2) {
-                IslandIconButton(systemName: "quote.bubble", size: 28, label: "Lyrics") { model.showPage(.lyrics) }
-                IslandIconButton(systemName: "list.bullet", size: 28, label: "Up Next") { model.showPage(.upNext) }
-                OutputButton(model: model)
-            }
+            accessories
         }
         .padding(.leading, 18)
         .padding(.trailing, 12)
         .padding(.bottom, 12)
-        .onAppear { np.wantQueue() }
-        .onDisappear { np.releaseQueue() }
+    }
+
+    /// Narrow: controls move under the title so nothing is squeezed or cut.
+    @ViewBuilder private var narrow: some View {
+        HStack(spacing: 12) {
+            artwork(64, radius: 14)
+            titles(size: 15)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        Spacer(minLength: 0)
+        PositionRow(info: info)
+            .padding(.horizontal, 18)
+        HStack(spacing: 4) {
+            TransportControls(info: info, sizes: (30, 38))
+            Spacer(minLength: 4)
+            accessories
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 2)
+        .padding(.bottom, 8)
+    }
+
+    private func artwork(_ size: CGFloat, radius: CGFloat) -> some View {
+        let np = env.nowPlaying
+        return Button { np.openSourceApp() } label: {
+            ArtworkView(image: np.artwork, size: size, radius: radius)
+                .shadow(color: .black.opacity(0.25), radius: 10, y: 5)
+        }
+        .buttonStyle(.plain)
+        .help("Open \(np.sourceApp?.localizedName ?? "player")")
+    }
+
+    private func titles(size: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(info.title).font(.system(size: size, weight: .semibold)).lineLimit(1)
+            Text([info.artist, info.album].filter { !$0.isEmpty }.joined(separator: " · "))
+                .font(.system(size: size - 3)).foregroundStyle(.secondary).lineLimit(1)
+            if model.settings.nowPlaying.showUpNext, let next = env.nowPlaying.queue?.upNext {
+                Text("Up next · \(next.title)")
+                    .font(.system(size: 11.5, weight: .medium)).foregroundStyle(.tertiary).lineLimit(1)
+                    .padding(.top, 2)
+            }
+        }
+    }
+
+    private var accessories: some View {
+        HStack(spacing: 2) {
+            IslandIconButton(systemName: "quote.bubble", size: 28, label: "Lyrics") { model.showPage(.lyrics) }
+            IslandIconButton(systemName: "list.bullet", size: 28, label: "Up Next") { model.showPage(.upNext) }
+            OutputButton(model: model)
+        }
     }
 }
 
