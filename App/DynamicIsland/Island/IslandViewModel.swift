@@ -14,9 +14,15 @@ final class IslandViewModel {
     let env: AppEnvironment
     var notch: NotchRect
     private(set) var hover = false
-    /// The pointer has rested on the compact island long enough to show the track's title.
+    /// The pointer is on the track's artwork (or on the title row it opened), so the title shows.
     private(set) var peek = false
     @ObservationIgnored private var peekTask: Task<Void, Never>?
+    @ObservationIgnored private var overMedia = false
+    /// Bumped when the pointer arrives on the closed island; the island bounces once.
+    private(set) var bounce = 0
+    /// Where the artwork ("artwork") and the open title row ("title") are, in the
+    /// island's coordinate space, reported by the views for the controller's pointer tests.
+    @ObservationIgnored var mediaRects: [String: CGRect] = [:]
     private(set) var userState: UserState = .none
     private(set) var nowPlayingPage: NowPlayingPage = .player
     /// Pins the presentation, for the preview in Settings.
@@ -91,19 +97,25 @@ final class IslandViewModel {
         max(1, DashboardLayout.rows(settings.visibleDashboard, columns: dashboardColumns).count)
     }
 
-    /// The dashboard button at the end of the compact island's right ear.
+    /// The dashboard button's room at the end of the compact island's right
+    /// ear. Kept whenever the button can appear, so hovering never resizes the island.
+    var reservesDashboardButton: Bool {
+        presentation == .compact && settings.dashboardButton != .off
+    }
+
+    /// The dashboard button is visible (it fades in on hover in its reserved room).
     var showsDashboardButton: Bool {
-        guard !isPreview || settings.dashboardButton == .always, presentation == .compact else { return false }
+        guard reservesDashboardButton else { return false }
         switch settings.dashboardButton {
         case .always: return true
-        case .onHover: return hover
+        case .onHover: return hover && !isPreview
         case .off: return false
         }
     }
 
     private var layoutContext: IslandMetrics.Context {
         IslandMetrics.Context(notch: notch.rect.size, style: settings.compactStyle, iconLimit: settings.backgroundApps.maxIcons,
-                              dashboardButton: showsDashboardButton, widthScale: widthScale, dashboardRows: dashboardRows,
+                              dashboardButton: reservesDashboardButton, widthScale: widthScale, dashboardRows: dashboardRows,
                               compactMaxWidth: settings.compactMaxWidth > 0 ? settings.compactMaxWidth : nil)
     }
 
@@ -150,19 +162,16 @@ final class IslandViewModel {
         } else {
             size = IslandMetrics.bodySize(for: p, ranked: ranked, expandedKind: kind, context: layoutContext)
         }
-        if hover {
-            let g = IslandMetrics.hoverGrowth(for: p)
-            size.width += g.width
-            if settings.compactStyle == .below, let track = peekingTrack {
+        // Hovering doesn't resize the island (it bounces); only the track's title adds room.
+        if let track = peekingTrack {
+            if settings.compactStyle == .below {
                 let fit = compactFit.ranked
                 let title = (track.title as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold)]).width
                 size.width = IslandMetrics.belowPeekWidth(band: size.width, titleWidth: title, secondaries: fit.secondaries.count,
-                                                          overflow: fit.overflow.count, dashboardButton: showsDashboardButton,
+                                                          overflow: fit.overflow.count, dashboardButton: reservesDashboardButton,
                                                           maxWidth: settings.compactMaxWidth > 0 ? settings.compactMaxWidth : nil)
             }
-            // The title row replaces the small lean downwards.
-            let peek = peekHeight
-            size.height += peek > 0 ? peek : g.height
+            size.height += peekHeight
         }
         return size
     }
@@ -276,23 +285,38 @@ final class IslandViewModel {
 
     func setHover(_ inside: Bool) {
         guard hover != inside else { return }
-        withAnimation(reduceMotion ? nil : .spring(duration: 0.35, bounce: 0.15)) { hover = inside }
+        // Only fades the dashboard button in its room; the size stays.
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) { hover = inside }
+        if inside, !isOpen, !reduceMotion { bounce += 1 }
+    }
+
+    /// Should this point (in the island's coordinate space) show the title? Only
+    /// the artwork opens it; once open, the title row keeps it open.
+    func isOverMedia(_ point: CGPoint) -> Bool {
+        if let art = mediaRects["artwork"], art.insetBy(dx: -5, dy: -5).contains(point) { return true }
+        if peek, let row = mediaRects["title"], row.insetBy(dx: 0, dy: -3).contains(point) { return true }
+        return false
+    }
+
+    /// The pointer moved on or off the track. Shows the title almost at once
+    /// (a brief rest filters out a pass across the menu bar) and hides it after
+    /// a short grace, so crossing from the ear to the title row keeps it open.
+    func setOverMedia(_ on: Bool) {
+        guard on != overMedia else { return }
+        overMedia = on
         peekTask?.cancel()
-        if inside {
-            // A short rest first, so sweeping across the menu bar doesn't flash it.
-            peekTask = Task { [weak self] in
-                try? await Task.sleep(for: .milliseconds(220))
-                guard !Task.isCancelled, let self, self.hover else { return }
-                withAnimation(self.reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.42, bounce: 0.18)) { self.peek = true }
-            }
-        } else if peek {
-            withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.34, bounce: 0.04)) { peek = false }
+        peekTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(on ? 60 : 140))
+            guard !Task.isCancelled, let self, self.overMedia == on, self.peek != on else { return }
+            let animation: Animation = self.reduceMotion ? .easeInOut(duration: 0.2)
+                : on ? .spring(duration: 0.38, bounce: 0.22) : .spring(duration: 0.3, bounce: 0)
+            withAnimation(animation) { self.peek = on }
         }
     }
 
     #if DEBUG
     /// Offline renders of the hover state.
-    func debugPeek(_ on: Bool) { hover = on; peek = on }
+    func debugPeek(hover: Bool, peek: Bool) { self.hover = hover; self.peek = peek }
     #endif
 
     // MARK: actions

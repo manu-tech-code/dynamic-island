@@ -17,7 +17,31 @@ final class IslandPanel: NSPanel {
 }
 
 final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
+    /// Pointer moves over the island while the panel takes mouse events. The
+    /// panel is never key, so they only arrive through an always-active tracking area.
+    var onPointerMoved: (() -> Void)?
+    private var tracking: NSTrackingArea?
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        tracking = area
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        onPointerMoved?()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        onPointerMoved?()
+    }
 }
 
 /// One island on one display: its panel, hit testing, hover, gestures and menu.
@@ -56,6 +80,7 @@ final class IslandController: NSObject {
         let host = FirstMouseHostingView(rootView: IslandRootView(model: model).environment(env))
         host.sizingOptions = []
         panel.contentView = host
+        host.onPointerMoved = { [weak self] in self?.pointerMoved(to: NSEvent.mouseLocation) }
         update(screen: screen)
         panel.orderFrontRegardless()
         model.presentMenu = { [weak self] menu in self?.popUp(menu) }
@@ -111,6 +136,9 @@ final class IslandController: NSObject {
     func pointerMoved(to p: NSPoint) {
         let now = contains(p)
         if panel.ignoresMouseEvents == now { panel.ignoresMouseEvents = !now }
+        // The title drops down only while the pointer is on the track itself.
+        let f = panel.frame
+        model.setOverMedia(now && model.presentation == .compact && model.isOverMedia(CGPoint(x: p.x - f.minX, y: f.maxY - p.y)))
         guard now != inside else { return }
         inside = now
         model.setHover(now)

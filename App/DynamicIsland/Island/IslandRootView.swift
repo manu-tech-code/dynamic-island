@@ -6,11 +6,49 @@ import SwiftUI
 /// and the content for the current presentation.
 struct IslandRootView: View {
     let model: IslandViewModel
+    /// The panel's coordinate space (top-left origin), for pointer tests.
+    static let space = "island"
 
     var body: some View {
         let size = model.outerSize
         let shape = NotchShape(bottomRadius: model.radius, shoulder: IslandMetrics.shoulder)
 
+        ZStack(alignment: .top) {
+            island(size: size, shape: shape)
+                // The pointer arriving on the closed island: one springy bounce, no resize.
+                .keyframeAnimator(initialValue: Bounce(), trigger: model.bounce) { content, b in
+                    content.scaleEffect(x: b.x, y: b.y, anchor: .top)
+                } keyframes: { _ in
+                    KeyframeTrack(\.x) {
+                        SpringKeyframe(1.025, duration: 0.11, spring: .snappy)
+                        SpringKeyframe(1, duration: 0.55, spring: .bouncy(duration: 0.55, extraBounce: 0.15))
+                    }
+                    KeyframeTrack(\.y) {
+                        SpringKeyframe(1.1, duration: 0.11, spring: .snappy)
+                        SpringKeyframe(1, duration: 0.55, spring: .bouncy(duration: 0.55, extraBounce: 0.15))
+                    }
+                }
+
+            if !model.notch.isHardware, model.settings.virtualNotchWhenIdle || model.presentation != .idle || model.hover {
+                // Displays without a camera housing get a virtual one.
+                NotchShape(bottomRadius: 10, shoulder: IslandMetrics.shoulder)
+                    .fill(.black)
+                    .frame(width: model.notch.rect.width + 2 * IslandMetrics.shoulder, height: model.notch.rect.height)
+                    .allowsHitTesting(false)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .coordinateSpace(.named(Self.space))
+        .transaction(value: model.outerSize) { t in
+            // Changes the engine makes (an activity starts or ends) get a gentle spring;
+            // user actions bring their own animation.
+            if t.animation == nil, !t.disablesAnimations, !model.reduceMotion { t.animation = .spring(duration: 0.45, bounce: 0.15) }
+        }
+        .environment(\.colorScheme, model.material == .black ? .dark : colorSchemeFromSystem)
+    }
+
+    /// The glow and the island itself: the part that bounces.
+    private func island(size: CGSize, shape: NotchShape) -> some View {
         ZStack(alignment: .top) {
             ZStack {
                 if let glow = model.glowColor {
@@ -53,22 +91,7 @@ struct IslandRootView: View {
                 .overlay {
                     if model.resizeBase != nil, !model.isPreview { ResizeHandles(model: model) }
                 }
-
-            if !model.notch.isHardware, model.settings.virtualNotchWhenIdle || model.presentation != .idle || model.hover {
-                // Displays without a camera housing get a virtual one.
-                NotchShape(bottomRadius: 10, shoulder: IslandMetrics.shoulder)
-                    .fill(.black)
-                    .frame(width: model.notch.rect.width + 2 * IslandMetrics.shoulder, height: model.notch.rect.height)
-                    .allowsHitTesting(false)
-            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .transaction(value: model.outerSize) { t in
-            // Changes the engine makes (an activity starts or ends) get a gentle spring;
-            // user actions bring their own animation.
-            if t.animation == nil, !t.disablesAnimations, !model.reduceMotion { t.animation = .spring(duration: 0.45, bounce: 0.15) }
-        }
-        .environment(\.colorScheme, model.material == .black ? .dark : colorSchemeFromSystem)
     }
 
     @Environment(\.colorScheme) private var colorSchemeFromSystem
@@ -182,6 +205,12 @@ private struct ResizeHandles: View {
             .help("Drag to change the width")
             .accessibilityHidden(true)
     }
+}
+
+/// Horizontal and vertical scale of the hover bounce.
+private struct Bounce {
+    var x: CGFloat = 1
+    var y: CGFloat = 1
 }
 
 extension AnyTransition {

@@ -276,16 +276,6 @@ public enum IslandMetrics {
         }
     }
 
-    /// How much the island leans toward the pointer on hover.
-    public static func hoverGrowth(for presentation: IslandPresentation) -> CGSize {
-        switch presentation {
-        case .idle: CGSize(width: 16, height: 4)
-        case .compact: CGSize(width: 12, height: 4)
-        case .expanded, .dashboard, .shelf: CGSize(width: 4, height: 2)
-        case .alert: .zero
-        }
-    }
-
     /// Extra height under the compact island while the pointer rests on a track:
     /// title and artist lines under the ears (beside), or the artist under the
     /// band's title (below). Beside, the shape stays under 72 pt, so it keeps

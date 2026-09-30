@@ -36,6 +36,7 @@ struct CompactView: View {
                     .padding(.horizontal, IslandMetrics.shoulder + IslandMetrics.earOuterPadding)
                     .padding(.top, 2)
                     .modifier(EarForeground(material: model.material))
+                    .modifier(MediaHotspot(model: model, key: "title"))
                     .transition(.peekRow)
             }
         }
@@ -51,7 +52,7 @@ struct CompactView: View {
             HStack(spacing: IslandMetrics.glyphSpacing) {
                 CompactTrailing(activity: primary, model: model)
                 SecondaryGlyphs(ranked: ranked, model: model)
-                if model.showsDashboardButton { DashboardButton(model: model).transition(.scale.combined(with: .opacity)) }
+                ReservedDashboardButton(model: model)
             }
             .frame(width: inner, alignment: .trailing)
             .padding(.leading, IslandMetrics.earInnerGap)
@@ -69,7 +70,7 @@ struct CompactView: View {
             HStack(spacing: 8) {
                 BelowBand(activity: primary, model: model)
                 SecondaryGlyphs(ranked: ranked, model: model)
-                if model.showsDashboardButton { DashboardButton(model: model).transition(.scale.combined(with: .opacity)) }
+                ReservedDashboardButton(model: model)
             }
             .padding(.horizontal, 14)
             .frame(height: IslandMetrics.belowBand - 2)
@@ -82,6 +83,7 @@ struct CompactView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.leading, 14 + 18 + 8)
                     .padding(.trailing, 14)
+                    .modifier(MediaHotspot(model: model, key: "title"))
                     .transition(.peekRow)
             }
         }
@@ -101,6 +103,7 @@ private struct CompactLeading: View {
         switch activity.payload {
         case .nowPlaying:
             ArtworkView(image: env.nowPlaying.artwork, size: 20, radius: 5)
+                .modifier(MediaHotspot(model: model, key: "artwork"))
         case .timer(let t):
             TimelineView(.periodic(from: .now, by: 1)) { ctx in
                 Ring(fraction: t.fractionRemaining(at: ctx.date), color: .orange, lineWidth: 2.5).frame(width: 17, height: 17)
@@ -162,6 +165,7 @@ private struct BelowBand: View {
         switch activity.payload {
         case .nowPlaying(let info):
             ArtworkView(image: env.nowPlaying.artwork, size: 18, radius: 5)
+                .modifier(MediaHotspot(model: model, key: "artwork"))
             if model.peekingTrack != nil {
                 MarqueeText(text: info.title, font: .system(size: 12, weight: .semibold), reduceMotion: model.reduceMotion)
             } else {
@@ -329,22 +333,42 @@ private struct PeekTitle: View {
 }
 
 extension AnyTransition {
-    /// The row appears once the shape has started to grow, and leaves quickly.
+    /// The row rides the same spring as the shape, sliding down with the
+    /// growing edge (the shape's clip reveals it), and fades out quickly.
     static var peekRow: AnyTransition {
         .asymmetric(
-            insertion: .modifier(active: PeekAppear(progress: 0), identity: PeekAppear(progress: 1))
-                .animation(.easeOut(duration: 0.26).delay(0.06)),
-            removal: .opacity.animation(.easeIn(duration: 0.1))
+            insertion: .opacity.combined(with: .offset(y: -8)),
+            removal: .opacity.animation(.easeOut(duration: 0.12))
         )
     }
 }
 
-private struct PeekAppear: ViewModifier {
-    let progress: Double
+/// The dashboard button in the room the compact island keeps for it: it fades
+/// in on hover instead of pushing the island wider.
+private struct ReservedDashboardButton: View {
+    let model: IslandViewModel
+
+    var body: some View {
+        if model.reservesDashboardButton {
+            let shown = model.showsDashboardButton
+            DashboardButton(model: model)
+                .opacity(shown ? 1 : 0)
+                .scaleEffect(shown ? 1 : 0.6)
+                .allowsHitTesting(shown)
+                .accessibilityHidden(!shown)
+        }
+    }
+}
+
+/// Reports where the track's artwork (or its open title row) is, so the
+/// controller can show the title only while the pointer is on it.
+struct MediaHotspot: ViewModifier {
+    let model: IslandViewModel
+    let key: String
+
     func body(content: Content) -> some View {
         content
-            .opacity(progress)
-            .offset(y: -5 * (1 - progress))
-            .blur(radius: 3 * (1 - progress))
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(IslandRootView.space)) } action: { model.mediaRects[key] = $0 }
+            .onDisappear { model.mediaRects[key] = nil }
     }
 }
