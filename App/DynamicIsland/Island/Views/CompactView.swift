@@ -6,12 +6,21 @@ struct CompactView: View {
     let model: IslandViewModel
 
     var body: some View {
-        let ranked = model.ranked
+        let ranked = model.compactFit.ranked
         if let primary = ranked.primary {
-            switch model.settings.compactStyle {
-            case .beside: beside(primary: primary, ranked: ranked)
-            case .below: below(primary: primary, ranked: ranked)
+            Group {
+                switch model.settings.compactStyle {
+                case .beside: beside(primary: primary, ranked: ranked)
+                case .below: below(primary: primary, ranked: ranked)
+                }
             }
+            // VoiceOver: one element that reads what's live, with actions.
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(model.accessibilitySummary)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { model.tap() }
+            .accessibilityAction(named: "Open dashboard") { model.openDashboard() }
+            .accessibilityAction(named: "Open shelf") { model.openShelf() }
         }
     }
 
@@ -28,6 +37,7 @@ struct CompactView: View {
             HStack(spacing: IslandMetrics.glyphSpacing) {
                 CompactTrailing(activity: primary, model: model)
                 SecondaryGlyphs(ranked: ranked, model: model)
+                if model.showsDashboardButton { DashboardButton(model: model).transition(.scale.combined(with: .opacity)) }
             }
             .frame(width: inner, alignment: .trailing)
             .padding(.leading, IslandMetrics.earInnerGap)
@@ -45,6 +55,7 @@ struct CompactView: View {
             HStack(spacing: 8) {
                 BelowBand(activity: primary, model: model)
                 SecondaryGlyphs(ranked: ranked, model: model)
+                if model.showsDashboardButton { DashboardButton(model: model).transition(.scale.combined(with: .opacity)) }
             }
             .padding(.horizontal, 14)
             .frame(height: IslandMetrics.belowBand - 2)
@@ -74,7 +85,7 @@ private struct CompactLeading: View {
         case .battery:
             Image(systemName: "battery.25percent").foregroundStyle(.red)
         case .backgroundApps(let apps):
-            AppIconRow(apps: AppSplit(apps: apps, limit: model.settings.backgroundApps.maxIcons).leading)
+            AppIconRow(apps: AppSplit(apps: apps, limit: model.compactFit.iconLimit).leading)
         case .shelf, .download, .privacy:
             Phase2Leading(payload: activity.payload)
         }
@@ -104,7 +115,7 @@ private struct CompactTrailing: View {
         case .battery(let b):
             Text("\(b.percent)%").monospacedDigit().foregroundStyle(.red)
         case .backgroundApps(let apps):
-            let split = AppSplit(apps: apps, limit: model.settings.backgroundApps.maxIcons)
+            let split = AppSplit(apps: apps, limit: model.compactFit.iconLimit)
             HStack(spacing: IslandMetrics.glyphSpacing) {
                 AppIconRow(apps: split.trailing)
                 if split.hidden > 0 { OverflowChip(count: split.hidden) }
@@ -152,7 +163,7 @@ private struct BelowBand: View {
             Spacer(minLength: 4)
             Text("\(b.percent)%").monospacedDigit().foregroundStyle(.red)
         case .backgroundApps(let apps):
-            let split = AppSplit(apps: apps, limit: model.settings.backgroundApps.maxIcons)
+            let split = AppSplit(apps: apps, limit: model.compactFit.iconLimit)
             Spacer(minLength: 0)
             AppIconRow(apps: split.leading + split.trailing)
             if split.hidden > 0 { OverflowChip(count: split.hidden) }

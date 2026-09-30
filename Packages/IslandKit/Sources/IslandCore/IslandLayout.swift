@@ -102,8 +102,13 @@ public enum IslandMetrics {
         return w
     }
 
-    public static func compactSize(notch: CGSize, style: CompactStyle, ranked: RankedActivities, backgroundIconLimit: Int) -> CGSize {
+    /// Room for the dashboard button at the outer end of the trailing ear.
+    public static let dashboardButton: CGFloat = 22 + glyphSpacing
+
+    public static func compactSize(notch: CGSize, style: CompactStyle, ranked: RankedActivities, backgroundIconLimit: Int,
+                                   dashboardButton showButton: Bool = false) -> CGSize {
         guard let primary = ranked.primary else { return idleSize(notch: notch) }
+        let button = showButton ? dashboardButton : 0
         let secondaries = ranked.secondaries.count
         let overflow = ranked.overflow.count
         switch style {
@@ -117,7 +122,7 @@ public enum IslandMetrics {
                 leading = iconRowWidth(count: left)
                 trailing = iconRowWidth(count: shown - left) + (hidden > 0 ? glyphSpacing + overflowChipWidth(hidden) : 0)
             }
-            trailing += secondaryWidth(secondaries: secondaries, overflow: overflow)
+            trailing += secondaryWidth(secondaries: secondaries, overflow: overflow) + button
             let ear = earOuterPadding + max(leading, trailing) + earInnerGap
             return CGSize(width: notch.width + 2 * ear, height: notch.height)
         case .below:
@@ -128,9 +133,39 @@ public enum IslandMetrics {
                 content = iconRowWidth(count: shown) + (hidden > 0 ? glyphSpacing + overflowChipWidth(hidden) : 0)
             }
             content += secondaryWidth(secondaries: secondaries, overflow: overflow)
-            let width = max(notch.width + 24, 2 * earOuterPadding + content + (content > 0 ? 60 : 0))
+            let width = max(notch.width + 24, 2 * earOuterPadding + content + (content > 0 ? 60 : 0)) + button
             return CGSize(width: width, height: notch.height + belowBand)
         }
+    }
+
+    /// The compact island after applying the user's width limit: background
+    /// app icons, then extra activities, fold into "+N" until it fits.
+    public struct CompactFit: Equatable, Sendable {
+        public var ranked: RankedActivities
+        public var iconLimit: Int
+        public var size: CGSize
+    }
+
+    public static func fitCompact(notch: CGSize, style: CompactStyle, ranked: RankedActivities, iconLimit: Int,
+                                  dashboardButton: Bool, maxWidth: CGFloat?) -> CompactFit {
+        var r = ranked
+        var limit = max(1, iconLimit)
+        func measure() -> CGSize {
+            compactSize(notch: notch, style: style, ranked: r, backgroundIconLimit: limit, dashboardButton: dashboardButton)
+        }
+        var size = measure()
+        guard let maxWidth, maxWidth > 0 else { return CompactFit(ranked: r, iconLimit: limit, size: size) }
+        while size.width > maxWidth {
+            if case .backgroundApps(let apps)? = r.primary?.payload, limit > 1, min(apps.count, limit) > 1 {
+                limit = min(apps.count, limit) - 1
+            } else if r.visible.count > 1 {
+                r.overflow.insert(r.visible.removeLast(), at: 0)
+            } else {
+                break // one activity is the minimum; it keeps its natural size
+            }
+            size = measure()
+        }
+        return CompactFit(ranked: r, iconLimit: limit, size: size)
     }
 
     public static func idleSize(notch: CGSize) -> CGSize {
@@ -138,6 +173,16 @@ public enum IslandMetrics {
     }
 
     // MARK: open states
+
+    /// Expanded size at the user's width (height stays; width never below 360).
+    public static func expandedSize(for kind: ActivityKind, widthScale: Double) -> CGSize {
+        let base = expandedSize(for: kind)
+        return CGSize(width: max(360, (base.width * CGFloat(widthScale)).rounded()), height: base.height)
+    }
+
+    public static func scaled(_ size: CGSize, _ widthScale: Double) -> CGSize {
+        CGSize(width: max(360, (size.width * CGFloat(widthScale)).rounded()), height: size.height)
+    }
 
     public static func expandedSize(for kind: ActivityKind) -> CGSize {
         switch kind {
@@ -167,6 +212,7 @@ public enum IslandMetrics {
                 : CGSize(width: max(notch.width + 24, 280), height: notch.height + belowBand)
         case .eventStarting, .deviceConnected: return CGSize(width: 460, height: 100)
         case .downloadFinished: return CGSize(width: 460, height: 88)
+        case .message: return CGSize(width: 440, height: 88)
         default: return CGSize(width: 400, height: 88)
         }
     }
@@ -191,6 +237,45 @@ public enum IslandMetrics {
         case .expanded, .dashboard, .shelf: CGSize(width: 4, height: 2)
         case .alert: .zero
         }
+    }
+
+    /// Everything besides the presentation that decides the island's size.
+    public struct Context: Equatable, Sendable {
+        public var notch: CGSize
+        public var style: CompactStyle
+        public var iconLimit: Int
+        public var dashboardButton: Bool
+        public var widthScale: Double
+        public var dashboardRows: Int
+        public var compactMaxWidth: CGFloat?
+
+        public init(notch: CGSize, style: CompactStyle = .beside, iconLimit: Int = 4, dashboardButton: Bool = false,
+                    widthScale: Double = 1, dashboardRows: Int = 1, compactMaxWidth: CGFloat? = nil) {
+            self.notch = notch; self.style = style; self.iconLimit = iconLimit; self.dashboardButton = dashboardButton
+            self.widthScale = widthScale; self.dashboardRows = dashboardRows; self.compactMaxWidth = compactMaxWidth
+        }
+    }
+
+    /// Body size for a presentation, before hover growth. `expandedKind` is the
+    /// kind of the expanded activity (it may not be on the compact island).
+    public static func bodySize(for presentation: IslandPresentation, ranked: RankedActivities, expandedKind: ActivityKind?,
+                                context c: Context) -> CGSize {
+        switch presentation {
+        case .idle: return idleSize(notch: c.notch)
+        case .compact:
+            return fitCompact(notch: c.notch, style: c.style, ranked: ranked, iconLimit: c.iconLimit,
+                              dashboardButton: c.dashboardButton, maxWidth: c.compactMaxWidth).size
+        case .expanded:
+            guard let kind = expandedKind else { return dashboardSize(c) }
+            return expandedSize(for: kind, widthScale: c.widthScale)
+        case .dashboard: return dashboardSize(c)
+        case .shelf: return scaled(shelf, c.widthScale)
+        case .alert(let alert): return alertSize(for: alert.style, notch: c.notch, compactStyle: c.style)
+        }
+    }
+
+    static func dashboardSize(_ c: Context) -> CGSize {
+        DashboardLayout.size(rows: c.dashboardRows, notchHeight: c.notch.height, width: DashboardLayout.width(scale: c.widthScale))
     }
 
     /// Body size for a presentation, before hover growth.

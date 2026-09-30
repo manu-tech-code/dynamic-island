@@ -78,16 +78,47 @@ final class IslandViewModel {
         }
     }
 
+    /// Width while the user drags a resize handle; committed to settings on release.
+    private(set) var liveWidthScale: Double?
+    var widthScale: Double { liveWidthScale ?? settings.openWidthScale }
+
+    var dashboardWidth: CGFloat { DashboardLayout.width(scale: widthScale) }
+    var dashboardColumns: Int { DashboardLayout.columns(forWidth: dashboardWidth) }
+    var dashboardRows: Int {
+        max(1, DashboardLayout.rows(settings.visibleDashboard, columns: dashboardColumns).count)
+    }
+
+    /// The dashboard button at the end of the compact island's right ear.
+    var showsDashboardButton: Bool {
+        guard !isPreview || settings.dashboardButton == .always, presentation == .compact else { return false }
+        switch settings.dashboardButton {
+        case .always: return true
+        case .onHover: return hover
+        case .off: return false
+        }
+    }
+
+    private var layoutContext: IslandMetrics.Context {
+        IslandMetrics.Context(notch: notch.rect.size, style: settings.compactStyle, iconLimit: settings.backgroundApps.maxIcons,
+                              dashboardButton: showsDashboardButton, widthScale: widthScale, dashboardRows: dashboardRows,
+                              compactMaxWidth: settings.compactMaxWidth > 0 ? settings.compactMaxWidth : nil)
+    }
+
+    /// What the compact island actually shows once the width limit is applied.
+    var compactFit: IslandMetrics.CompactFit {
+        let c = layoutContext
+        return IslandMetrics.fitCompact(notch: c.notch, style: c.style, ranked: ranked, iconLimit: c.iconLimit,
+                                        dashboardButton: c.dashboardButton, maxWidth: c.compactMaxWidth)
+    }
+
     var bodySize: CGSize {
         let p = presentation
         var size: CGSize
-        if case .expanded(let id) = p, let a = env.engine.activity(id: id) {
-            size = a.kind == .nowPlaying && nowPlayingPage != .player
-                ? IslandMetrics.nowPlayingDetail : IslandMetrics.expandedSize(for: a.kind)
+        let kind = expandedActivity?.kind
+        if kind == .nowPlaying, nowPlayingPage != .player {
+            size = IslandMetrics.scaled(IslandMetrics.nowPlayingDetail, widthScale)
         } else {
-            size = IslandMetrics.bodySize(for: p, notch: notch.rect.size, style: settings.compactStyle,
-                                          ranked: ranked, backgroundIconLimit: settings.backgroundApps.maxIcons,
-                                          dashboardRows: settings.dashboardRows)
+            size = IslandMetrics.bodySize(for: p, ranked: ranked, expandedKind: kind, context: layoutContext)
         }
         if hover {
             let g = IslandMetrics.hoverGrowth(for: p)
@@ -95,6 +126,55 @@ final class IslandViewModel {
             size.height += g.height
         }
         return size
+    }
+
+    /// What VoiceOver reads for the compact island.
+    var accessibilitySummary: String {
+        let fit = compactFit
+        let now = Date()
+        var parts = fit.ranked.visible.map { a -> String in
+            switch a.payload {
+            case .nowPlaying(let i): "\(i.title)\(i.artist.isEmpty ? "" : " by \(i.artist)"), \(i.isPlaying ? "playing" : "paused")"
+            case .timer(let t): "\(t.label), \(IslandFormat.countdown(t.remaining(at: now))) left"
+            case .calendar(let e): "\(e.title), \(IslandFormat.untilLong(e.start, from: now))"
+            case .battery(let b): "Battery low, \(b.percent) percent"
+            case .backgroundApps(let apps): "\(apps.count) background apps"
+            case .shelf(let items): "\(items.count) items on the shelf"
+            case .download(let d): "Downloading \(d.name)\(d.fraction.map { ", \(Int($0 * 100)) percent" } ?? "")"
+            case .privacy(let p): p.microphone && p.camera ? "Microphone and camera in use" : p.microphone ? "Microphone in use" : "Camera in use"
+            }
+        }
+        if !fit.ranked.overflow.isEmpty { parts.append("and \(fit.ranked.overflow.count) more") }
+        return "Dynamic Island. " + (parts.isEmpty ? "Nothing live" : parts.joined(separator: ". "))
+    }
+
+    /// The standard (scale 1) width of the current open state, for resizing.
+    var baseOpenWidth: CGFloat? {
+        switch presentation {
+        case .dashboard: return DashboardLayout.width
+        case .shelf: return IslandMetrics.shelf.width
+        case .expanded:
+            guard let kind = expandedActivity?.kind else { return nil }
+            return kind == .nowPlaying && nowPlayingPage != .player ? IslandMetrics.nowPlayingDetail.width : IslandMetrics.expandedSize(for: kind).width
+        default: return nil
+        }
+    }
+
+    /// Drag on a side handle: the island is centred, so each point of drag
+    /// changes the width by two.
+    func resize(by dx: CGFloat, from start: Double) {
+        guard let base = baseOpenWidth else { return }
+        let r = IslandSettings.widthScaleRange
+        let scale = min(max(start + Double(2 * dx / base), r.lowerBound), r.upperBound)
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) { liveWidthScale = scale }
+    }
+
+    func endResize() {
+        guard let scale = liveWidthScale else { return }
+        env.settings.settings.openWidthScale = (scale * 100).rounded() / 100
+        liveWidthScale = nil
     }
 
     var outerSize: CGSize {

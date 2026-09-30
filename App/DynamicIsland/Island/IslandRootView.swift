@@ -41,10 +41,16 @@ struct IslandRootView: View {
                 .overlay {
                     if model.dropTargeted {
                         shape.stroke(Color.accentColor, lineWidth: 2).allowsHitTesting(false)
+                    } else if model.env.look.increaseContrast, model.material != .glass {
+                        // Increase Contrast: a clear edge on the parts we draw ourselves.
+                        shape.stroke(Color.white.opacity(0.85), lineWidth: 1).allowsHitTesting(false)
                     }
                 }
+                .overlay {
+                    if model.baseOpenWidth != nil, !model.isPreview { ResizeHandles(model: model) }
+                }
 
-            if !model.notch.isHardware {
+            if !model.notch.isHardware, model.settings.virtualNotchWhenIdle || model.presentation != .idle || model.hover {
                 // Displays without a camera housing get a virtual one.
                 NotchShape(bottomRadius: 10, shoulder: IslandMetrics.shoulder)
                     .fill(.black)
@@ -56,7 +62,7 @@ struct IslandRootView: View {
         .transaction(value: model.outerSize) { t in
             // Changes the engine makes (an activity starts or ends) get a gentle spring;
             // user actions bring their own animation.
-            if t.animation == nil, !model.reduceMotion { t.animation = .spring(duration: 0.45, bounce: 0.15) }
+            if t.animation == nil, !t.disablesAnimations, !model.reduceMotion { t.animation = .spring(duration: 0.45, bounce: 0.15) }
         }
         .environment(\.colorScheme, model.material == .black ? .dark : colorSchemeFromSystem)
     }
@@ -128,6 +134,45 @@ struct IslandContent: View {
         case .alert(let alert):
             AlertView(alert: alert, model: model)
         }
+    }
+}
+
+/// Invisible strips on the open island's left and right edges. Dragging one
+/// changes the width on both sides (the island stays centred).
+private struct ResizeHandles: View {
+    let model: IslandViewModel
+    @State private var start: Double?
+
+    var body: some View {
+        HStack(spacing: 0) {
+            handle(direction: -1)
+            Spacer(minLength: 0)
+            handle(direction: 1)
+        }
+        .padding(.horizontal, IslandMetrics.shoulder - 2)
+        .padding(.top, model.notch.rect.height)
+    }
+
+    private func handle(direction: CGFloat) -> some View {
+        Color.clear
+            .frame(width: 10)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .onHover { inside in (inside ? NSCursor.resizeLeftRight : NSCursor.arrow).set() }
+            .gesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged { value in
+                        if start == nil { start = model.widthScale }
+                        model.resize(by: value.translation.width * direction, from: start ?? 1)
+                        NSCursor.resizeLeftRight.set()
+                    }
+                    .onEnded { _ in
+                        model.endResize()
+                        start = nil
+                    }
+            )
+            .help("Drag to change the width")
+            .accessibilityHidden(true)
     }
 }
 

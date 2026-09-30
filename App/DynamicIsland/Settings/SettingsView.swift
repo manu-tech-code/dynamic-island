@@ -141,8 +141,18 @@ private struct GeneralPane: View {
                     ForEach(DisplayMode.allCases) { Text($0.displayName).tag($0) }
                 }
             }
+            Section {
+                Picker("When an app is full screen", selection: $store.settings.fullScreen) {
+                    ForEach(FullScreenBehavior.allCases) { Text($0.displayName).tag($0) }
+                }
+                Toggle("Show the virtual notch on displays without a camera", isOn: $store.settings.virtualNotchWhenIdle)
+            } header: {
+                Text("Where it shows")
+            } footer: {
+                Text("“Unless something is live” keeps music, timers, calls and downloads visible over full-screen apps, and hides the rest. Alerts always show.")
+            }
             Section("Controls") {
-                LabeledContent("Open or close the dashboard") { Text("⌥⌘I").monospaced() }
+                LabeledContent("Open or close the dashboard") { HotKeyRecorder() }
                 LabeledContent("Open the island") { Text("Click, or scroll down on it") }
                 LabeledContent("Close the island") { Text("Click outside, or scroll up") }
                 LabeledContent("Island menu") { Text("Right-click the island") }
@@ -208,6 +218,36 @@ private struct LayoutPane: View {
                     .font(.callout).foregroundStyle(.secondary)
             } header: {
                 Text("Compact island")
+            }
+
+            Section {
+                LabeledContent("Width when open") {
+                    HStack {
+                        Slider(value: $store.settings.openWidthScale, in: IslandSettings.widthScaleRange, step: 0.05) {
+                            EmptyView()
+                        } minimumValueLabel: { Text("Narrow").font(.caption) } maximumValueLabel: { Text("Wide").font(.caption) }
+                            .frame(width: 260)
+                        Text("\(Int((s.openWidthScale * 100).rounded()))%").monospacedDigit().frame(width: 44, alignment: .trailing)
+                    }
+                }
+                Toggle("Limit the compact island's width", isOn: Binding(
+                    get: { store.settings.compactMaxWidth > 0 },
+                    set: { store.settings.compactMaxWidth = $0 ? 480 : 0 }))
+                if s.compactMaxWidth > 0 {
+                    LabeledContent("Widest") {
+                        HStack {
+                            Slider(value: $store.settings.compactMaxWidth, in: IslandSettings.compactMaxWidthRange, step: 10).frame(width: 260)
+                            Text("\(Int(s.compactMaxWidth)) pt").monospacedDigit().frame(width: 56, alignment: .trailing)
+                        }
+                    }
+                }
+                Picker("Dashboard button", selection: $store.settings.dashboardButton) {
+                    ForEach(DashboardButtonMode.allCases) { Text($0.displayName).tag($0) }
+                }
+            } header: {
+                Text("Size")
+            } footer: {
+                Text("You can also drag the left or right edge of the open island to resize it. When the compact island hits its limit, extra app icons and activities fold into +N. The dashboard button opens the dashboard in one click.")
             }
 
             Section {

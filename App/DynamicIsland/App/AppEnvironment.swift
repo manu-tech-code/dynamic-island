@@ -24,6 +24,7 @@ final class AppEnvironment {
     let weather: WeatherService
     let clipboard: ClipboardService
     let shortcuts: ShortcutsService
+    let fullScreen: FullScreenMonitor
 
     @ObservationIgnored var openSettings: () -> Void = {}
 
@@ -49,6 +50,7 @@ final class AppEnvironment {
         weather = WeatherService(settings: settings)
         clipboard = ClipboardService(settings: settings)
         shortcuts = ShortcutsService()
+        fullScreen = FullScreenMonitor()
         let providers: [ActivityProvider] = [nowPlaying, timers, battery, calendar, backgroundApps, shelf, downloads, privacy]
         providers.forEach(engine.register)
     }
@@ -60,6 +62,7 @@ final class AppEnvironment {
         backgroundApps.start()
         audioOutput.start()
         hud.start()
+        fullScreen.start()
         clipboard.start()
         shortcuts.reload()
         // Modules that ask for permission start only when they're on.

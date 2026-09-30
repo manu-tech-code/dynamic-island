@@ -5,8 +5,15 @@ import SwiftUI
 /// Borderless, non-activating panel above the menu bar. Never key, never
 /// main, so clicking the island doesn't take focus from the user's app.
 final class IslandPanel: NSPanel {
-    override var canBecomeKey: Bool { false }
+    /// Only while opened from the keyboard, so Esc and Tab work. A
+    /// non-activating panel can be key without activating the app.
+    var allowsKey = false
+    var onCancel: (() -> Void)?
+
+    override var canBecomeKey: Bool { allowsKey }
     override var canBecomeMain: Bool { false }
+
+    override func cancelOperation(_ sender: Any?) { onCancel?() }
 }
 
 final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
@@ -52,6 +59,18 @@ final class IslandController: NSObject {
         update(screen: screen)
         panel.orderFrontRegardless()
         model.presentMenu = { [weak self] menu in self?.popUp(menu) }
+        panel.onCancel = { [weak self] in self?.model.collapse() }
+        // Hand the keyboard back once the island closes.
+        whenChanged({ [model] in model.isOpen }) { [weak self] open in
+            guard let self, !open, self.panel.isKeyWindow else { return }
+            self.panel.allowsKey = false
+            self.panel.orderOut(nil)
+            if !self.hiddenForFullScreen { self.panel.orderFrontRegardless() }
+        }
+        // Full-screen apps: hide or show per the user's choice.
+        whenChanged({ [weak self] in self?.shouldHideForFullScreen ?? false }) { [weak self] hide in
+            self?.setHiddenForFullScreen(hide)
+        }
         whenChanged({ [model] in "\(model.contentKey) \(Int(model.outerSize.width))×\(Int(model.outerSize.height))" }) { [displayID] in
             Log.info("island \(displayID): \($0)")
         }
@@ -127,11 +146,40 @@ final class IslandController: NSObject {
         }
     }
 
-    /// For opens that didn't come from the pointer (the keyboard shortcut):
-    /// close again if the pointer never comes over.
+    /// From the keyboard shortcut. The panel takes the keyboard so Esc closes
+    /// it and Tab moves between controls; it closes again if the pointer
+    /// never comes over.
     func toggleDashboard() {
         model.toggleDashboard()
-        if model.isOpen, !inside { scheduleCollapse(after: 6) }
+        if model.isOpen {
+            if hiddenForFullScreen { panel.orderFrontRegardless() }
+            panel.allowsKey = true
+            panel.makeKey()
+            if !inside { scheduleCollapse(after: 8) }
+        }
+    }
+
+    // MARK: full screen
+
+    private(set) var hiddenForFullScreen = false
+
+    private var shouldHideForFullScreen: Bool {
+        guard env.fullScreen.isFullScreen(displayID) else { return false }
+        if model.isOpen || env.engine.alert != nil { return false }
+        switch model.settings.fullScreen {
+        case .show: return false
+        case .hide: return true
+        case .hideWhenIdle:
+            let quiet: Set<ActivityKind> = [.backgroundApps, .shelf]
+            return model.ranked.visible.allSatisfy { quiet.contains($0.kind) }
+        }
+    }
+
+    private func setHiddenForFullScreen(_ hide: Bool) {
+        guard hide != hiddenForFullScreen else { return }
+        hiddenForFullScreen = hide
+        if hide { panel.orderOut(nil) } else { panel.orderFrontRegardless() }
+        Log.info("island \(displayID): \(hide ? "hidden for" : "back from") full screen")
     }
 
     func openShelfForDrag() {
@@ -212,6 +260,17 @@ final class IslandController: NSObject {
         }
         menu.addItem(.separator())
 
+        let width = NSMenuItem(title: "Width", action: nil, keyEquivalent: "")
+        width.submenu = NSMenu()
+        for (title, scale) in [("Narrow", 0.85), ("Standard", 1.0), ("Wide", 1.2)] {
+            let item = add(width.submenu!, title, #selector(menuWidth(_:)))
+            item.representedObject = scale
+            item.state = abs(model.settings.openWidthScale - scale) < 0.01 ? .on : .off
+        }
+        width.submenu!.addItem(.separator())
+        width.submenu!.addItem(withTitle: "Drag the island's edges to set any width", action: nil, keyEquivalent: "").isEnabled = false
+        menu.addItem(width)
+
         let style = NSMenuItem(title: "Compact Style", action: nil, keyEquivalent: "")
         style.submenu = NSMenu()
         for s in CompactStyle.allCases {
@@ -254,6 +313,10 @@ final class IslandController: NSObject {
     @objc private func menuToggle() { model.isOpen ? model.collapse() : model.openDashboard() }
     @objc private func menuPlayPause() { env.nowPlaying.togglePlayPause() }
     @objc private func menuShelf() { model.openShelf() }
+    @objc private func menuWidth(_ item: NSMenuItem) {
+        guard let scale = item.representedObject as? Double else { return }
+        withAnimation(.spring(duration: 0.45, bounce: 0.15)) { env.settings.settings.openWidthScale = scale }
+    }
     @objc private func menuNext() { env.nowPlaying.next() }
     @objc private func menuDismissAlert() { env.engine.dismissAlert() }
     @objc private func menuSettings() { env.openSettings() }

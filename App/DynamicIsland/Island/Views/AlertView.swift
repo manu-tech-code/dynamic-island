@@ -51,6 +51,11 @@ struct AlertView: View {
             DownloadAlertContent(name: name, path: path, model: model)
         case .volume, .brightness:
             EmptyView()
+        case .message(let title, let subtitle, let symbolName):
+            symbol(symbolName, Color.accentColor)
+            titles(title, subtitle)
+            Spacer()
+            DashboardButton(model: model, size: 28)
         case .eventStarting(let e):
             symbol("calendar", Color(hex: e.calendarColorHex))
             titles(e.title, "Starting now")

@@ -290,6 +290,8 @@ public struct IslandAlert: Identifiable, Equatable, Sendable {
         case downloadFinished(name: String, path: String)
         case volume(level: Double, muted: Bool, output: String)
         case brightness(level: Double)
+        /// A general note, e.g. the first-run tip.
+        case message(title: String, subtitle: String, symbol: String)
     }
 
     /// HUDs update in place while a key is held, instead of queueing.

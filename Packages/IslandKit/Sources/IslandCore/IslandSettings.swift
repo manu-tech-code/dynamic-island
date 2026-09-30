@@ -3,6 +3,8 @@ import Foundation
 public enum DisplayMode: String, Codable, CaseIterable, Sendable, Identifiable {
     /// Only the built-in display with a hardware notch.
     case builtIn
+    /// Whichever display has the menu bar (follows it when you change it).
+    case menuBarDisplay
     /// Every display; displays without a notch get a virtual one.
     case all
 
@@ -10,9 +12,56 @@ public enum DisplayMode: String, Codable, CaseIterable, Sendable, Identifiable {
     public var displayName: String {
         switch self {
         case .builtIn: "Built-in display"
-        case .all: "All displays (virtual notch)"
+        case .menuBarDisplay: "Display with the menu bar"
+        case .all: "All displays"
         }
     }
+}
+
+/// When a dashboard button shows on the compact island.
+public enum DashboardButtonMode: String, Codable, CaseIterable, Sendable, Identifiable {
+    case always, onHover, off
+    public var id: String { rawValue }
+    public var displayName: String {
+        switch self {
+        case .always: "Always"
+        case .onHover: "When the pointer is over it"
+        case .off: "Never"
+        }
+    }
+}
+
+/// What the island does while an app is full screen on its display.
+public enum FullScreenBehavior: String, Codable, CaseIterable, Sendable, Identifiable {
+    /// Stay as usual.
+    case show
+    /// Hide unless something live is on it (music, a timer, a call) or an alert shows.
+    case hideWhenIdle
+    /// Hide; only alerts and the keyboard shortcut bring it back.
+    case hide
+    public var id: String { rawValue }
+    public var displayName: String {
+        switch self {
+        case .show: "Keep showing"
+        case .hideWhenIdle: "Hide unless something is live"
+        case .hide: "Hide"
+        }
+    }
+}
+
+/// A keyboard shortcut in Carbon terms (virtual key code + modifier mask),
+/// with the label shown in Settings.
+public struct HotKeySpec: Codable, Equatable, Sendable {
+    public var keyCode: Int
+    public var carbonModifiers: Int
+    public var label: String
+
+    public init(keyCode: Int, carbonModifiers: Int, label: String) {
+        self.keyCode = keyCode; self.carbonModifiers = carbonModifiers; self.label = label
+    }
+
+    /// ⌥⌘I: kVK_ANSI_I = 34, cmdKey | optionKey = 256 | 2048.
+    public static let `default` = HotKeySpec(keyCode: 34, carbonModifiers: 256 | 2048, label: "⌥⌘I")
 }
 
 public struct ModuleSettings: Codable, Equatable, Sendable {
@@ -156,6 +205,16 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     public var glowFromArtwork: Bool = true
     public var displays: DisplayMode = .builtIn
     public var showMenuBarIcon: Bool = true
+    /// Width of the open island (expanded, dashboard, shelf), 0.75…1.35 × standard.
+    public var openWidthScale: Double = 1
+    /// Widest the compact island may get, in points; 0 means no limit. When
+    /// content won't fit, background app icons and extra activities fold into "+N".
+    public var compactMaxWidth: Double = 0
+    public var dashboardButton: DashboardButtonMode = .onHover
+    public var fullScreen: FullScreenBehavior = .hideWhenIdle
+    /// On displays without a camera, draw the black virtual notch even when idle.
+    public var virtualNotchWhenIdle: Bool = true
+    public var hotKey: HotKeySpec = .default
 
     /// Per-module on/off and compact visibility, keyed by `ActivityKind.rawValue`.
     /// Missing entries use `ActivityKind.defaultModule`.
@@ -180,6 +239,8 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     public init() {}
 
     public static let maxActivitiesRange = 0...12
+    public static let widthScaleRange = 0.75...1.35
+    public static let compactMaxWidthRange = 300.0...900.0
 
     public var activityLimit: Int? { maxActivities <= 0 ? nil : maxActivities }
 
@@ -193,7 +254,9 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         dashboard.filter { item in item.kind.module.map { self[module: $0].enabled } ?? true }
     }
 
-    public var dashboardRows: Int { max(1, DashboardLayout.rows(visibleDashboard).count) }
+    public var dashboardWidth: CGFloat { DashboardLayout.width(scale: openWidthScale) }
+    public var dashboardColumns: Int { DashboardLayout.columns(forWidth: dashboardWidth) }
+    public var dashboardRows: Int { max(1, DashboardLayout.rows(visibleDashboard, columns: dashboardColumns).count) }
 
     public var compactKinds: Set<ActivityKind> {
         Set(ActivityKind.allCases.filter { $0.canBeLive && self[module: $0].enabled && self[module: $0].showInCompact })
@@ -204,6 +267,10 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         var s = self
         s.maxActivities = min(max(s.maxActivities, Self.maxActivitiesRange.lowerBound), Self.maxActivitiesRange.upperBound)
         s.hoverDelayMs = min(max(s.hoverDelayMs, 0), 1500)
+        s.openWidthScale = min(max(s.openWidthScale, Self.widthScaleRange.lowerBound), Self.widthScaleRange.upperBound)
+        if s.compactMaxWidth != 0 {
+            s.compactMaxWidth = min(max(s.compactMaxWidth, Self.compactMaxWidthRange.lowerBound), Self.compactMaxWidthRange.upperBound)
+        }
         s.backgroundApps.maxIcons = min(max(s.backgroundApps.maxIcons, 1), 24)
         s.calendar.leadMinutes = min(max(s.calendar.leadMinutes, 0), 120)
         s.nowPlaying.keepPausedMinutes = min(max(s.nowPlaying.keepPausedMinutes, 0), 120)
@@ -229,6 +296,7 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case material, compactStyle, maxActivities, priority, openOnHover, hoverDelayMs, collapseOnMouseLeave
         case glowFromArtwork, displays, showMenuBarIcon, modules
+        case openWidthScale, compactMaxWidth, dashboardButton, fullScreen, virtualNotchWhenIdle, hotKey
         case nowPlaying, backgroundApps, calendar, timers, battery, systemStats
         case shelf, downloads, devices, hud, weather, clipboard, shortcuts, privacy, dashboard
     }
@@ -255,6 +323,12 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         glowFromArtwork = v(.glowFromArtwork, d.glowFromArtwork)
         displays = v(.displays, d.displays)
         showMenuBarIcon = v(.showMenuBarIcon, d.showMenuBarIcon)
+        openWidthScale = v(.openWidthScale, d.openWidthScale)
+        compactMaxWidth = v(.compactMaxWidth, d.compactMaxWidth)
+        dashboardButton = v(.dashboardButton, d.dashboardButton)
+        fullScreen = v(.fullScreen, d.fullScreen)
+        virtualNotchWhenIdle = v(.virtualNotchWhenIdle, d.virtualNotchWhenIdle)
+        hotKey = c.tolerant(.hotKey, d.hotKey)
         modules = c.tolerant(.modules, [String: ModuleSettings]())
 
         nowPlaying = c.tolerant(.nowPlaying, d.nowPlaying)

@@ -38,7 +38,14 @@ struct EarRow<Leading: View, Trailing: View>: View {
         HStack(spacing: 0) {
             HStack(spacing: 6) { leading() }.frame(maxWidth: .infinity, alignment: .leading)
             Color.clear.frame(width: model.notch.rect.width + 2 * IslandMetrics.earInnerGap)
-            HStack(spacing: 6) { trailing() }.frame(maxWidth: .infinity, alignment: .trailing)
+            HStack(spacing: 6) {
+                trailing()
+                // Open states other than the dashboard get a one-click way to it.
+                if !model.isPreview, model.presentation != .dashboard, model.isOpen {
+                    DashboardButton(model: model, size: 24)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .font(.system(size: 12, weight: .semibold))
         .padding(.horizontal, 18)

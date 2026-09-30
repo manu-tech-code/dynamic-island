@@ -10,6 +10,7 @@ Requires macOS 26+, Xcode 26+ and [XcodeGen](https://github.com/yonaskolb/XcodeG
 ```sh
 scripts/run.sh            # generate the project, build Debug, relaunch the app
 scripts/run.sh --no-run   # build only
+scripts/release.sh        # Release build + build/DynamicIsland-<version>.dmg
 cd Packages/IslandKit && swift test   # core logic tests
 ```
 
@@ -32,8 +33,10 @@ permissions (Calendars, Automation) between builds.
 ## Using it
 
 - Click the island to expand it; click an idle island for the dashboard.
+- The grid button (on hover, or always — Settings › Layout) opens the dashboard in one click.
+- Drag the left or right edge of the open island to change its width.
 - Scroll down on the island to open, up to close. Right-click for the menu.
-- <kbd>⌥⌘I</kbd> opens or closes the dashboard from anywhere.
+- <kbd>⌥⌘I</kbd> (changeable in Settings › General) opens the dashboard from anywhere; <kbd>Esc</kbd> closes it.
 - Drag a file toward the notch to open the shelf; drop to keep it, drag it out later.
 - Settings: right-click › Settings…, or open the app again from Finder.
 

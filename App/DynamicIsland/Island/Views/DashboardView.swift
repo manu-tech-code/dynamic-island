@@ -8,16 +8,17 @@ struct DashboardView: View {
     let model: IslandViewModel
     @Environment(AppEnvironment.self) private var env
 
-    static let slot = (DashboardLayout.width - 28 - CGFloat(DashboardLayout.columns - 1) * DashboardLayout.spacing) / CGFloat(DashboardLayout.columns)
-
-    static func width(_ size: WidgetSize) -> CGFloat {
-        CGFloat(size.columns) * slot + CGFloat(size.columns - 1) * DashboardLayout.spacing
+    static func width(_ size: WidgetSize, dashboardWidth: CGFloat = DashboardLayout.width) -> CGFloat {
+        let slot = DashboardLayout.slotWidth(forWidth: dashboardWidth)
+        let n = min(size.columns, DashboardLayout.columns(forWidth: dashboardWidth))
+        return CGFloat(n) * slot + CGFloat(n - 1) * DashboardLayout.spacing
     }
 
     var body: some View {
         let s = model.settings
         let items = s.visibleDashboard
-        let rows = DashboardLayout.rows(items)
+        let rows = DashboardLayout.rows(items, columns: model.dashboardColumns)
+        let dashboardWidth = model.dashboardWidth
         let cardRadius = max(12, model.radius - 14)
         VStack(spacing: 0) {
             EarRow(model: model) {
@@ -50,7 +51,7 @@ struct DashboardView: View {
                         HStack(spacing: DashboardLayout.spacing) {
                             ForEach(row) { item in
                                 WidgetView(item: item, radius: cardRadius, model: model)
-                                    .frame(width: Self.width(item.size), height: DashboardLayout.cardHeight)
+                                    .frame(width: Self.width(item.size, dashboardWidth: dashboardWidth), height: DashboardLayout.cardHeight)
                             }
                         }
                     }

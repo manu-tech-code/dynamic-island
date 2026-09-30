@@ -32,8 +32,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         islands = IslandManager(env: env)
         islands.start()
         statusItem = StatusItemController(env: env, islands: islands)
-        hotKey = HotKey(keyCode: kVK_ANSI_I, modifiers: cmdKey | optionKey) { [weak self] in
+        registerHotKey(env.settings.settings.hotKey)
+        whenChanged({ [env] in env.settings.settings.hotKey }) { [weak self] spec in self?.registerHotKey(spec) }
+        showWelcomeIfFirstLaunch()
+    }
+
+    private func registerHotKey(_ spec: HotKeySpec) {
+        hotKey = nil
+        hotKey = HotKey(keyCode: spec.keyCode, modifiers: spec.carbonModifiers) { [weak self] in
             self?.islands.toggleDashboard()
+        }
+        Log.info("hotkey \(spec.label) \(hotKey == nil ? "failed" : "registered")")
+    }
+
+    /// A one-time tip, so the dashboard button and right-click are discoverable.
+    private func showWelcomeIfFirstLaunch() {
+        let key = "didShowWelcome"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        Task { [env] in
+            try? await Task.sleep(for: .seconds(1.5))
+            env.engine.post(IslandAlert(kind: .backgroundApps, style: .message(
+                title: "Dynamic Island is ready",
+                subtitle: "Click it to open. The grid button opens the dashboard; right-click for options.",
+                symbol: "sparkles"), holdSeconds: 7))
         }
     }
 
@@ -110,7 +132,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         case "debug-render-widgets":
             let model = IslandViewModel(env: env, notch: NotchRect(rect: CGRect(x: 0, y: 0, width: 185, height: 32), isHardware: false))
-            let slot = DashboardView.slot
+            let slot = DashboardLayout.slotWidth(forWidth: DashboardLayout.width)
             func save(_ view: some View, _ name: String) {
                 let r = ImageRenderer(content: view.environment(env).environment(\.colorScheme, .dark))
                 r.scale = 1

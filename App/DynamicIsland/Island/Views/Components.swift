@@ -151,6 +151,18 @@ struct IslandCapsuleButton: View {
     }
 }
 
+/// One click to the dashboard, from the compact island or any open state.
+struct DashboardButton: View {
+    let model: IslandViewModel
+    var size: CGFloat = 22
+
+    var body: some View {
+        IslandIconButton(systemName: "square.grid.2x2.fill", size: size, label: "Open dashboard") {
+            model.openDashboard()
+        }
+    }
+}
+
 /// Card inside the dashboard: fill instead of glass (no glass on glass), and a
 /// radius concentric with the island (outer radius minus the padding).
 struct IslandCard<Content: View>: View {

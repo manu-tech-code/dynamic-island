@@ -240,3 +240,63 @@ enum LocationText {
         }
     }
 }
+
+// MARK: shortcut recorder
+
+/// Click, then press the new shortcut. Esc cancels. Needs at least one of ⌘⌥⌃.
+struct HotKeyRecorder: View {
+    @Environment(AppEnvironment.self) private var env
+    @State private var recording = false
+    @State private var monitor: Any?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button(recording ? "Type a shortcut…" : env.settings.settings.hotKey.label) {
+                recording ? stop() : start()
+            }
+            .font(.body.monospaced())
+            if env.settings.settings.hotKey != .default {
+                Button("Reset") { env.settings.settings.hotKey = .default }
+            }
+        }
+        .onDisappear(perform: stop)
+    }
+
+    private func start() {
+        recording = true
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == 53 { stop(); return nil } // Esc
+            let mods = event.modifierFlags.intersection([.command, .option, .control, .shift])
+            guard !mods.isDisjoint(with: [.command, .option, .control]) else { NSSound.beep(); return nil }
+            var carbon = 0
+            if mods.contains(.command) { carbon |= 256 }
+            if mods.contains(.shift) { carbon |= 512 }
+            if mods.contains(.option) { carbon |= 2048 }
+            if mods.contains(.control) { carbon |= 4096 }
+            let label = Self.symbols(mods) + Self.keyName(event)
+            env.settings.settings.hotKey = HotKeySpec(keyCode: Int(event.keyCode), carbonModifiers: carbon, label: label)
+            stop()
+            return nil
+        }
+    }
+
+    private func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+        recording = false
+    }
+
+    static func symbols(_ m: NSEvent.ModifierFlags) -> String {
+        (m.contains(.control) ? "⌃" : "") + (m.contains(.option) ? "⌥" : "") + (m.contains(.shift) ? "⇧" : "") + (m.contains(.command) ? "⌘" : "")
+    }
+
+    static func keyName(_ e: NSEvent) -> String {
+        let special: [UInt16: String] = [
+            49: "Space", 36: "↩", 48: "⇥", 51: "⌫", 123: "←", 124: "→", 125: "↓", 126: "↑",
+            122: "F1", 120: "F2", 99: "F3", 118: "F4", 96: "F5", 97: "F6", 98: "F7", 100: "F8",
+            101: "F9", 109: "F10", 103: "F11", 111: "F12",
+        ]
+        if let s = special[e.keyCode] { return s }
+        return (e.charactersIgnoringModifiers ?? "?").uppercased()
+    }
+}

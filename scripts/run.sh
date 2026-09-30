@@ -10,7 +10,7 @@ DERIVED="$ROOT/build/DerivedData"
 
 xcodegen generate --quiet
 xcodebuild -project DynamicIsland.xcodeproj -scheme DynamicIsland -configuration Debug \
-  -derivedDataPath "$DERIVED" -destination 'platform=macOS' build -quiet 2>&1 \
+  -derivedDataPath "$DERIVED" -destination 'platform=macOS,arch=arm64' build -quiet 2>&1 \
   | grep -vE "^(Command line invocation|Build settings from|    [A-Z_]+ = )" || true
 
 APP="$DERIVED/Build/Products/Debug/DynamicIsland.app"

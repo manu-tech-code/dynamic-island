@@ -108,8 +108,9 @@ public struct DashboardItem: Codable, Equatable, Hashable, Sendable, Identifiabl
     ]
 }
 
-/// A 4-column grid, like Notification Center widgets: small takes one slot,
-/// medium takes two. Rows flow left to right; the dashboard grows by rows.
+/// A grid like Notification Center widgets: small takes one slot, medium
+/// takes two. Rows flow left to right; the dashboard grows by rows. The
+/// column count follows the width the user picks (3 narrow, 4 standard, 5 wide).
 public enum DashboardLayout {
     public static let columns = 4
     public static let maxRows = 3
@@ -118,15 +119,34 @@ public enum DashboardLayout {
     public static let spacing: CGFloat = 10
     public static let topPadding: CGFloat = 10
     public static let bottomPadding: CGFloat = 14
+    public static let horizontalPadding: CGFloat = 14
+
+    public static func width(scale: Double) -> CGFloat {
+        (width * CGFloat(scale)).rounded()
+    }
+
+    /// Keeps small widgets at least ~130 pt wide.
+    public static func columns(forWidth w: CGFloat) -> Int {
+        switch w {
+        case ..<600: 3
+        case ..<830: 4
+        default: 5
+        }
+    }
+
+    public static func slotWidth(forWidth w: CGFloat) -> CGFloat {
+        let c = CGFloat(columns(forWidth: w))
+        return (w - 2 * horizontalPadding - (c - 1) * spacing) / c
+    }
 
     /// Packs items into rows in order. A medium item that doesn't fit the
     /// current row starts the next one. Items past `maxRows` are dropped.
-    public static func rows(_ items: [DashboardItem]) -> [[DashboardItem]] {
+    public static func rows(_ items: [DashboardItem], columns: Int = columns) -> [[DashboardItem]] {
         var rows: [[DashboardItem]] = []
         var current: [DashboardItem] = []
         var used = 0
         for item in items {
-            let w = item.size.columns
+            let w = min(item.size.columns, columns)
             if used + w > columns {
                 rows.append(current)
                 current = []
@@ -140,8 +160,8 @@ public enum DashboardLayout {
     }
 
     /// Island body size for a dashboard with `rows` rows below the camera.
-    public static func size(rows: Int, notchHeight: CGFloat) -> CGSize {
+    public static func size(rows: Int, notchHeight: CGFloat, width w: CGFloat = width) -> CGSize {
         let r = CGFloat(max(1, rows))
-        return CGSize(width: width, height: notchHeight + topPadding + r * cardHeight + (r - 1) * spacing + bottomPadding)
+        return CGSize(width: w, height: notchHeight + topPadding + r * cardHeight + (r - 1) * spacing + bottomPadding)
     }
 }

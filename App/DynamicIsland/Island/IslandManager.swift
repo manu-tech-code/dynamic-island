@@ -61,6 +61,8 @@ final class IslandManager {
         switch env.settings.settings.displays {
         case .all:
             return NSScreen.screens
+        case .menuBarDisplay:
+            return Array(NSScreen.screens.prefix(1))
         case .builtIn:
             let notched = NSScreen.screens.filter { $0.safeAreaInsets.top > 0 }
             // Lid closed or a Mac without a notch: use the menu bar display.
