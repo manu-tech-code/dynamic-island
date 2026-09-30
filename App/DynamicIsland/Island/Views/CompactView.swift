@@ -338,7 +338,7 @@ extension AnyTransition {
     static var peekRow: AnyTransition {
         .asymmetric(
             insertion: .opacity.combined(with: .offset(y: -8)),
-            removal: .opacity.animation(.easeOut(duration: 0.12))
+            removal: .opacity.animation(IslandMotion.peekRowOut)
         )
     }
 }

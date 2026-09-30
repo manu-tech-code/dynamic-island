@@ -20,12 +20,12 @@ struct IslandRootView: View {
                     content.scaleEffect(x: b.x, y: b.y, anchor: .top)
                 } keyframes: { _ in
                     KeyframeTrack(\.x) {
-                        SpringKeyframe(1.025, duration: 0.11, spring: .snappy)
-                        SpringKeyframe(1, duration: 0.55, spring: .bouncy(duration: 0.55, extraBounce: 0.15))
+                        SpringKeyframe(1.025, duration: IslandMotion.bounceUpDuration, spring: IslandMotion.bounceUp)
+                        SpringKeyframe(1, duration: IslandMotion.bounceSettleDuration, spring: IslandMotion.bounceSettle)
                     }
                     KeyframeTrack(\.y) {
-                        SpringKeyframe(1.1, duration: 0.11, spring: .snappy)
-                        SpringKeyframe(1, duration: 0.55, spring: .bouncy(duration: 0.55, extraBounce: 0.15))
+                        SpringKeyframe(1.1, duration: IslandMotion.bounceUpDuration, spring: IslandMotion.bounceUp)
+                        SpringKeyframe(1, duration: IslandMotion.bounceSettleDuration, spring: IslandMotion.bounceSettle)
                     }
                 }
 
@@ -42,7 +42,7 @@ struct IslandRootView: View {
         .transaction(value: model.outerSize) { t in
             // Changes the engine makes (an activity starts or ends) get a gentle spring;
             // user actions bring their own animation.
-            if t.animation == nil, !t.disablesAnimations, !model.reduceMotion { t.animation = .spring(duration: 0.45, bounce: 0.15) }
+            if t.animation == nil, !t.disablesAnimations, !model.reduceMotion { t.animation = IslandMotion.engine }
         }
         .environment(\.colorScheme, model.material == .black ? .dark : colorSchemeFromSystem)
     }
@@ -217,8 +217,8 @@ extension AnyTransition {
     static var islandContent: AnyTransition {
         .asymmetric(
             insertion: .modifier(active: ContentAppear(progress: 0), identity: ContentAppear(progress: 1))
-                .animation(.easeOut(duration: 0.28).delay(0.07)),
-            removal: .opacity.animation(.easeIn(duration: 0.12))
+                .animation(IslandMotion.contentIn),
+            removal: .opacity.animation(IslandMotion.contentOut)
         )
     }
 }

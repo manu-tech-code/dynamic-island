@@ -274,8 +274,7 @@ final class IslandViewModel {
     var reduceMotion: Bool { env.look.reduceMotion }
 
     private func animate(open: Bool, _ body: () -> Void) {
-        let animation: Animation = reduceMotion ? .easeInOut(duration: 0.2)
-            : open ? .spring(duration: 0.5, bounce: 0.22) : .spring(duration: 0.42, bounce: 0.06)
+        let animation: Animation = reduceMotion ? IslandMotion.reduced : open ? IslandMotion.open : IslandMotion.close
         withAnimation(animation, body)
     }
 
@@ -286,7 +285,7 @@ final class IslandViewModel {
     func setHover(_ inside: Bool) {
         guard hover != inside else { return }
         // Only fades the dashboard button in its room; the size stays.
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) { hover = inside }
+        withAnimation(reduceMotion ? nil : IslandMotion.hover) { hover = inside }
         if inside, !isOpen, !reduceMotion { bounce += 1 }
     }
 
@@ -308,8 +307,7 @@ final class IslandViewModel {
         peekTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(on ? 60 : 140))
             guard !Task.isCancelled, let self, self.overMedia == on, self.peek != on else { return }
-            let animation: Animation = self.reduceMotion ? .easeInOut(duration: 0.2)
-                : on ? .spring(duration: 0.38, bounce: 0.22) : .spring(duration: 0.3, bounce: 0)
+            let animation: Animation = self.reduceMotion ? IslandMotion.reduced : on ? IslandMotion.peekOpen : IslandMotion.peekClose
             withAnimation(animation) { self.peek = on }
         }
     }
