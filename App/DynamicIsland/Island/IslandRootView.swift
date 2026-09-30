@@ -1,0 +1,137 @@
+import IslandCore
+import SwiftUI
+
+/// Fills the island panel. Draws the island at the top centre: optional
+/// artwork glow, the surface (black, glass, or the Hybrid collar over glass)
+/// and the content for the current presentation.
+struct IslandRootView: View {
+    let model: IslandViewModel
+
+    var body: some View {
+        let size = model.outerSize
+        let shape = NotchShape(bottomRadius: model.radius, shoulder: IslandMetrics.shoulder)
+
+        ZStack(alignment: .top) {
+            if let glow = model.glowColor {
+                shape.fill(glow)
+                    .frame(width: size.width, height: size.height)
+                    .blur(radius: 22)
+                    .opacity(0.55)
+                    .offset(y: 6)
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
+            }
+
+            IslandContent(model: model)
+                .frame(width: size.width, height: size.height, alignment: .top)
+                .background(alignment: .top) { surfaceBackground(shape: shape, size: size) }
+                .modifier(GlassSurface(material: model.material, shape: shape))
+                .clipShape(shape)
+                .shadow(color: .black.opacity(model.material == .black ? 0.3 : 0), radius: 10, y: 4)
+                .contentShape(shape)
+                .onTapGesture { model.tap() }
+
+            if !model.notch.isHardware {
+                // Displays without a camera housing get a virtual one.
+                NotchShape(bottomRadius: 10, shoulder: IslandMetrics.shoulder)
+                    .fill(.black)
+                    .frame(width: model.notch.rect.width + 2 * IslandMetrics.shoulder, height: model.notch.rect.height)
+                    .allowsHitTesting(false)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .transaction(value: model.outerSize) { t in
+            // Changes the engine makes (an activity starts or ends) get a gentle spring;
+            // user actions bring their own animation.
+            if t.animation == nil, !model.reduceMotion { t.animation = .spring(duration: 0.45, bounce: 0.15) }
+        }
+        .environment(\.colorScheme, model.material == .black ? .dark : colorSchemeFromSystem)
+    }
+
+    @Environment(\.colorScheme) private var colorSchemeFromSystem
+
+    @ViewBuilder
+    private func surfaceBackground(shape: NotchShape, size: CGSize) -> some View {
+        switch model.material {
+        case .black:
+            shape.fill(.black)
+        case .hybrid:
+            let collar = model.notch.rect.height
+            let fade = model.env.look.collarFade(open: model.isOpen)
+            let h = max(size.height, 1)
+            Rectangle().fill(.black)
+                .mask(LinearGradient(stops: [
+                    .init(color: .black, location: 0),
+                    .init(color: .black, location: min(1, collar / h)),
+                    .init(color: .clear, location: min(1, (collar + fade) / h)),
+                ], startPoint: .top, endPoint: .bottom))
+        case .glass:
+            Color.clear
+        }
+    }
+}
+
+/// Real system Liquid Glass behind the content, so the user's slider,
+/// Reduce Transparency and Increase Contrast all apply without any work here.
+private struct GlassSurface: ViewModifier {
+    let material: IslandMaterial
+    let shape: NotchShape
+
+    func body(content: Content) -> some View {
+        switch material {
+        case .black: content
+        case .hybrid, .glass: content.glassEffect(.regular, in: shape)
+        }
+    }
+}
+
+/// Swaps content per presentation with Apple's "grow into content" feel:
+/// the shape moves first, content fades and sharpens in 70 ms later.
+struct IslandContent: View {
+    let model: IslandViewModel
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            content
+                .id(model.contentKey)
+                .transition(model.reduceMotion ? .opacity : .islandContent)
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        switch model.presentation {
+        case .idle:
+            Color.clear
+        case .compact:
+            CompactView(model: model)
+        case .expanded(let id):
+            if let activity = model.env.engine.activity(id: id) {
+                ExpandedView(activity: activity, model: model)
+            }
+        case .dashboard:
+            DashboardView(model: model)
+        case .alert(let alert):
+            AlertView(alert: alert, model: model)
+        }
+    }
+}
+
+extension AnyTransition {
+    static var islandContent: AnyTransition {
+        .asymmetric(
+            insertion: .modifier(active: ContentAppear(progress: 0), identity: ContentAppear(progress: 1))
+                .animation(.easeOut(duration: 0.28).delay(0.07)),
+            removal: .opacity.animation(.easeIn(duration: 0.12))
+        )
+    }
+}
+
+private struct ContentAppear: ViewModifier {
+    let progress: Double
+    func body(content: Content) -> some View {
+        content
+            .opacity(progress)
+            .scaleEffect(0.96 + 0.04 * progress, anchor: .top)
+            .blur(radius: 6 * (1 - progress))
+    }
+}

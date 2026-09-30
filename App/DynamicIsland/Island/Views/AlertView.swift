@@ -1,0 +1,67 @@
+import IslandCore
+import SwiftUI
+
+/// A brief moment: the island grows, holds, and retracts on its own.
+struct AlertView: View {
+    let alert: IslandAlert
+    let model: IslandViewModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Color.clear.frame(height: model.notch.rect.height)
+            HStack(spacing: 14) { content }
+                .padding(.horizontal, 22)
+                .frame(maxHeight: .infinity)
+        }
+        .padding(.horizontal, IslandMetrics.shoulder)
+    }
+
+    @ViewBuilder private var content: some View {
+        switch alert.style {
+        case .chargerConnected(let p):
+            symbol("bolt.fill", .green)
+            titles("Charging", "\(p)%")
+            Spacer()
+            Ring(fraction: Double(p) / 100, color: .green, lineWidth: 4).frame(width: 34, height: 34)
+        case .chargerDisconnected(let p):
+            symbol("powerplug.portrait", .secondary)
+            titles("On battery", "\(p)% remaining")
+            Spacer()
+            Ring(fraction: Double(p) / 100, color: p <= 20 ? .red : .primary, lineWidth: 4).frame(width: 34, height: 34)
+        case .lowBattery(let p):
+            symbol("battery.25percent", .red)
+            titles("Low battery", "\(p)% remaining. Plug in soon.")
+            Spacer()
+        case .timerFinished(let label):
+            symbol("timer", .orange)
+            titles("Timer done", label)
+            Spacer()
+            IslandCapsuleButton(title: "Dismiss") { model.env.engine.dismissAlert() }
+        case .eventStarting(let e):
+            symbol("calendar", Color(hex: e.calendarColorHex))
+            titles(e.title, "Starting now")
+            Spacer()
+            if let url = e.joinURL {
+                IslandCapsuleButton(title: "Join", systemName: "video.fill", prominent: true) {
+                    NSWorkspace.shared.open(url)
+                    model.env.engine.dismissAlert()
+                }
+            }
+        }
+    }
+
+    private func symbol(_ name: String, _ style: some ShapeStyle) -> some View {
+        Image(systemName: name)
+            .font(.system(size: 26, weight: .semibold))
+            .foregroundStyle(style)
+            .symbolEffect(.bounce, value: alert.id)
+            .frame(width: 36)
+    }
+
+    private func titles(_ title: String, _ subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title).font(.system(size: 15, weight: .semibold)).lineLimit(1)
+            Text(subtitle).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+        }
+    }
+}
