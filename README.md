@@ -21,6 +21,8 @@ The Xcode project is generated from `project.yml` and isn't committed. Run
 Builds are signed with your Apple Development identity, so macOS keeps
 permissions (Calendars, Automation) between builds.
 
+Branches, pull requests and releases: see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Layout
 
 | Path | What |
