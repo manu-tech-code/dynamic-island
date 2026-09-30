@@ -241,13 +241,13 @@ private struct LayoutPane: View {
                         }
                     }
                 }
-                Picker("Dashboard button", selection: $store.settings.dashboardButton) {
-                    ForEach(DashboardButtonMode.allCases) { Text($0.displayName).tag($0) }
-                }
+                Toggle("Show a dashboard button on the compact island", isOn: Binding(
+                    get: { store.settings.dashboardButton == .always },
+                    set: { store.settings.dashboardButton = $0 ? .always : .off }))
             } header: {
                 Text("Size")
             } footer: {
-                Text("Applies to the compact and the open island. You can also drag the island's left or right edge. When there isn't room, extra app icons and activities fold into +N instead of being cut off. The dashboard button opens the dashboard in one click.")
+                Text("Width applies to the open island: the dashboard, the player and the shelf. You can also drag its left or right edge. The compact island always fits what's on it, and grows or shrinks as activities come and go; whatever isn't on it is in the dashboard.")
             }
 
             Section {
@@ -561,6 +561,13 @@ private struct ModulesPane: View {
         case .nowPlaying:
             Stepper(value: $store.settings.nowPlaying.keepPausedMinutes, in: 0...30) {
                 LabeledContent("Keep a paused track for", value: "\(store.settings.nowPlaying.keepPausedMinutes) min")
+            }
+            Toggle(isOn: $store.settings.nowPlaying.titleOnHover) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Show the title when the pointer rests on the island")
+                    Text("The song and artist appear under the compact island; long titles scroll.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
             Toggle("Show the next track under the artist", isOn: $store.settings.nowPlaying.showUpNext)
             Toggle(isOn: $store.settings.nowPlaying.lyricsEnabled) {

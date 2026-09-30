@@ -35,6 +35,8 @@ Branches, pull requests and releases: see [CONTRIBUTING.md](CONTRIBUTING.md).
 ## Using it
 
 - Click the island to expand it; click an idle island for the dashboard.
+- Rest the pointer on the island while something plays to see the song and artist under it
+  (Settings › Modules › Now Playing).
 - The grid button (on hover, or always — Settings › Layout) opens the dashboard in one click.
 - Drag the left or right edge of the island, compact or open, to change its width. The same
   width applies to both (also in Settings › Layout › Width, or Narrow/Standard/Wide in the menu).

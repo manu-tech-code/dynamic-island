@@ -18,16 +18,21 @@ public enum DisplayMode: String, Codable, CaseIterable, Sendable, Identifiable {
     }
 }
 
-/// When a dashboard button shows on the compact island.
+/// Whether the compact island shows a dashboard button at the end of its right ear.
 public enum DashboardButtonMode: String, Codable, CaseIterable, Sendable, Identifiable {
-    case always, onHover, off
+    case always, off
     public var id: String { rawValue }
     public var displayName: String {
         switch self {
-        case .always: "Always"
-        case .onHover: "When the pointer is over it"
-        case .off: "Never"
+        case .always: "Show"
+        case .off: "Off"
         }
+    }
+
+    /// "onHover" was removed (it had to reserve empty room); it reads as `.always`.
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = raw == Self.off.rawValue ? .off : .always
     }
 }
 
@@ -82,6 +87,8 @@ public struct NowPlayingSettings: Codable, Equatable, Sendable {
     public var lyricsEnabled: Bool = true
     /// Show the next track under the artist.
     public var showUpNext: Bool = true
+    /// Resting the pointer on the compact island shows the title and artist under it.
+    public var titleOnHover: Bool = true
     public init() {}
 }
 
@@ -210,7 +217,7 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     /// Widest the compact island may get, in points; 0 means no limit. When
     /// content won't fit, background app icons and extra activities fold into "+N".
     public var compactMaxWidth: Double = 0
-    public var dashboardButton: DashboardButtonMode = .onHover
+    public var dashboardButton: DashboardButtonMode = .always
     public var fullScreen: FullScreenBehavior = .hideWhenIdle
     /// On displays without a camera, draw the black virtual notch even when idle.
     public var virtualNotchWhenIdle: Bool = true

@@ -14,6 +14,15 @@ final class IslandViewModel {
     let env: AppEnvironment
     var notch: NotchRect
     private(set) var hover = false
+    /// The pointer is on the track's artwork (or on the title row it opened), so the title shows.
+    private(set) var peek = false
+    @ObservationIgnored private var peekTask: Task<Void, Never>?
+    @ObservationIgnored private var overMedia = false
+    /// Bumped when the pointer arrives on the closed island; the island bounces once.
+    private(set) var bounce = 0
+    /// Where the artwork ("artwork") and the open title row ("title") are, in the
+    /// island's coordinate space, reported by the views for the controller's pointer tests.
+    @ObservationIgnored var mediaRects: [String: CGRect] = [:]
     private(set) var userState: UserState = .none
     private(set) var nowPlayingPage: NowPlayingPage = .player
     /// Pins the presentation, for the preview in Settings.
@@ -90,12 +99,7 @@ final class IslandViewModel {
 
     /// The dashboard button at the end of the compact island's right ear.
     var showsDashboardButton: Bool {
-        guard !isPreview || settings.dashboardButton == .always, presentation == .compact else { return false }
-        switch settings.dashboardButton {
-        case .always: return true
-        case .onHover: return hover
-        case .off: return false
-        }
+        presentation == .compact && settings.dashboardButton == .always
     }
 
     private var layoutContext: IslandMetrics.Context {
@@ -104,18 +108,29 @@ final class IslandViewModel {
                               compactMaxWidth: settings.compactMaxWidth > 0 ? settings.compactMaxWidth : nil)
     }
 
-    /// What the compact island actually shows at the user's width and limit.
+    /// What the compact island shows, and where: it fits its content, within the user's width limit.
     var compactFit: IslandMetrics.CompactFit {
         let c = layoutContext
         return IslandMetrics.fitCompact(notch: c.notch, style: c.style, ranked: ranked, iconLimit: c.iconLimit,
-                                        dashboardButton: c.dashboardButton, maxWidth: c.compactMaxWidth, scale: c.widthScale)
+                                        dashboardButton: c.dashboardButton, maxWidth: c.compactMaxWidth)
     }
 
-    /// The compact island at the standard width, used to turn a drag into a scale.
-    private var naturalCompactWidth: CGFloat {
-        let c = layoutContext
-        return IslandMetrics.fitCompact(notch: c.notch, style: c.style, ranked: ranked, iconLimit: c.iconLimit,
-                                        dashboardButton: c.dashboardButton, maxWidth: c.compactMaxWidth).size.width
+    /// The track playing on the compact island, while it shows its title under the ears.
+    var peekingTrack: NowPlayingInfo? {
+        guard peek, !isPreview, settings.nowPlaying.titleOnHover, presentation == .compact,
+              case .nowPlaying(let info)? = compactFit.ranked.primary?.payload, !info.title.isEmpty else { return nil }
+        return info
+    }
+
+    private var peekHeight: CGFloat {
+        guard let info = peekingTrack else { return 0 }
+        return IslandMetrics.nowPlayingPeekHeight(style: settings.compactStyle, hasArtist: !info.artist.isEmpty)
+    }
+
+    /// Height of the Hybrid material's black collar: the notch, plus the title
+    /// row while peeking beside the notch (it belongs to the ears).
+    var collarHeight: CGFloat {
+        notch.rect.height + (settings.compactStyle == .beside ? peekHeight : 0)
     }
 
     var bodySize: CGSize {
@@ -129,10 +144,16 @@ final class IslandViewModel {
         } else {
             size = IslandMetrics.bodySize(for: p, ranked: ranked, expandedKind: kind, context: layoutContext)
         }
-        if hover {
-            let g = IslandMetrics.hoverGrowth(for: p)
-            size.width += g.width
-            size.height += g.height
+        // Hovering doesn't resize the island (it bounces); only the track's title adds room.
+        if let track = peekingTrack {
+            if settings.compactStyle == .below {
+                let fit = compactFit.ranked
+                let title = (track.title as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold)]).width
+                size.width = IslandMetrics.belowPeekWidth(band: size.width, titleWidth: title, secondaries: fit.secondaries.count,
+                                                          dashboardButton: showsDashboardButton,
+                                                          maxWidth: settings.compactMaxWidth > 0 ? settings.compactMaxWidth : nil)
+            }
+            size.height += peekHeight
         }
         return size
     }
@@ -166,14 +187,11 @@ final class IslandViewModel {
     var isNarrow: Bool { bodySize.width < 470 }
 
     /// How many points of width one unit of scale is worth in the current
-    /// state, for turning a drag into a scale. nil where resizing doesn't apply.
+    /// state, for turning a drag into a scale. nil where resizing doesn't apply:
+    /// the compact island fits its content, so only open states resize.
     var resizeBase: CGFloat? {
         switch presentation {
-        case .compact:
-            // The ears scale around the notch (beside) or the band scales (below).
-            let natural = naturalCompactWidth
-            return settings.compactStyle == .beside ? max(40, natural - notch.rect.width) : natural
-        case .idle, .alert: return nil
+        case .idle, .compact, .alert: return nil
         default: return baseOpenWidth
         }
     }
@@ -213,7 +231,8 @@ final class IslandViewModel {
     }
 
     var radius: CGFloat {
-        IslandMetrics.radius(forHeight: bodySize.height)
+        // Peeking stays in the small-card corner family (18 pt), however tall the band gets.
+        IslandMetrics.radius(forHeight: peekHeight > 0 ? min(bodySize.height, 70) : bodySize.height)
     }
 
     var material: IslandMaterial { settings.material }
@@ -234,8 +253,7 @@ final class IslandViewModel {
     var reduceMotion: Bool { env.look.reduceMotion }
 
     private func animate(open: Bool, _ body: () -> Void) {
-        let animation: Animation = reduceMotion ? .easeInOut(duration: 0.2)
-            : open ? .spring(duration: 0.5, bounce: 0.22) : .spring(duration: 0.42, bounce: 0.06)
+        let animation: Animation = reduceMotion ? IslandMotion.reduced : open ? IslandMotion.open : IslandMotion.close
         withAnimation(animation, body)
     }
 
@@ -245,8 +263,37 @@ final class IslandViewModel {
 
     func setHover(_ inside: Bool) {
         guard hover != inside else { return }
-        withAnimation(reduceMotion ? nil : .spring(duration: 0.35, bounce: 0.15)) { hover = inside }
+        withAnimation(reduceMotion ? nil : IslandMotion.hover) { hover = inside }
+        if inside, !isOpen, !reduceMotion { bounce += 1 }
     }
+
+    /// Should this point (in the island's coordinate space) show the title? Only
+    /// the artwork opens it; once open, the title row keeps it open.
+    func isOverMedia(_ point: CGPoint) -> Bool {
+        if let art = mediaRects["artwork"], art.insetBy(dx: -5, dy: -5).contains(point) { return true }
+        if peek, let row = mediaRects["title"], row.insetBy(dx: 0, dy: -3).contains(point) { return true }
+        return false
+    }
+
+    /// The pointer moved on or off the track. Shows the title almost at once
+    /// (a brief rest filters out a pass across the menu bar) and hides it after
+    /// a short grace, so crossing from the ear to the title row keeps it open.
+    func setOverMedia(_ on: Bool) {
+        guard on != overMedia else { return }
+        overMedia = on
+        peekTask?.cancel()
+        peekTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(on ? 60 : 140))
+            guard !Task.isCancelled, let self, self.overMedia == on, self.peek != on else { return }
+            let animation: Animation = self.reduceMotion ? IslandMotion.reduced : on ? IslandMotion.peekOpen : IslandMotion.peekClose
+            withAnimation(animation) { self.peek = on }
+        }
+    }
+
+    #if DEBUG
+    /// Offline renders of the hover state.
+    func debugPeek(hover: Bool, peek: Bool) { self.hover = hover; self.peek = peek }
+    #endif
 
     // MARK: actions
 

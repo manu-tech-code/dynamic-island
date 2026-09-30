@@ -6,21 +6,63 @@ import SwiftUI
 /// and the content for the current presentation.
 struct IslandRootView: View {
     let model: IslandViewModel
+    /// The panel's coordinate space (top-left origin), for pointer tests.
+    static let space = "island"
 
     var body: some View {
         let size = model.outerSize
         let shape = NotchShape(bottomRadius: model.radius, shoulder: IslandMetrics.shoulder)
 
         ZStack(alignment: .top) {
-            if let glow = model.glowColor {
-                shape.fill(glow)
-                    .frame(width: size.width, height: size.height)
-                    .blur(radius: 22)
-                    .opacity(0.55)
-                    .offset(y: 6)
-                    .transition(.opacity)
+            island(size: size, shape: shape)
+                // The pointer arriving on the closed island: one springy bounce, no resize.
+                .keyframeAnimator(initialValue: Bounce(), trigger: model.bounce) { content, b in
+                    content.scaleEffect(x: b.x, y: b.y, anchor: .top)
+                } keyframes: { _ in
+                    KeyframeTrack(\.x) {
+                        SpringKeyframe(1.025, duration: IslandMotion.bounceUpDuration, spring: IslandMotion.bounceUp)
+                        SpringKeyframe(1, duration: IslandMotion.bounceSettleDuration, spring: IslandMotion.bounceSettle)
+                    }
+                    KeyframeTrack(\.y) {
+                        SpringKeyframe(1.1, duration: IslandMotion.bounceUpDuration, spring: IslandMotion.bounceUp)
+                        SpringKeyframe(1, duration: IslandMotion.bounceSettleDuration, spring: IslandMotion.bounceSettle)
+                    }
+                }
+
+            if !model.notch.isHardware, model.settings.virtualNotchWhenIdle || model.presentation != .idle || model.hover {
+                // Displays without a camera housing get a virtual one.
+                NotchShape(bottomRadius: 10, shoulder: IslandMetrics.shoulder)
+                    .fill(.black)
+                    .frame(width: model.notch.rect.width + 2 * IslandMetrics.shoulder, height: model.notch.rect.height)
                     .allowsHitTesting(false)
             }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .coordinateSpace(.named(Self.space))
+        .transaction(value: model.outerSize) { t in
+            // Changes the engine makes (an activity starts or ends) get a gentle spring;
+            // user actions bring their own animation.
+            if t.animation == nil, !t.disablesAnimations, !model.reduceMotion { t.animation = IslandMotion.engine }
+        }
+        .environment(\.colorScheme, model.material == .black ? .dark : colorSchemeFromSystem)
+    }
+
+    /// The glow and the island itself: the part that bounces.
+    private func island(size: CGSize, shape: NotchShape) -> some View {
+        ZStack(alignment: .top) {
+            ZStack {
+                if let glow = model.glowColor {
+                    shape.fill(glow)
+                        .frame(width: size.width, height: size.height)
+                        .blur(radius: 22)
+                        .opacity(0.55)
+                        .offset(y: 6)
+                        .transition(.opacity)
+                        .allowsHitTesting(false)
+                }
+            }
+            // Only the glow: it fades in and out and eases between artwork colours.
+            .animation(model.reduceMotion ? nil : .easeInOut(duration: 0.5), value: model.glowColor)
 
             IslandContent(model: model)
                 .frame(width: size.width, height: size.height, alignment: .top)
@@ -49,22 +91,7 @@ struct IslandRootView: View {
                 .overlay {
                     if model.resizeBase != nil, !model.isPreview { ResizeHandles(model: model) }
                 }
-
-            if !model.notch.isHardware, model.settings.virtualNotchWhenIdle || model.presentation != .idle || model.hover {
-                // Displays without a camera housing get a virtual one.
-                NotchShape(bottomRadius: 10, shoulder: IslandMetrics.shoulder)
-                    .fill(.black)
-                    .frame(width: model.notch.rect.width + 2 * IslandMetrics.shoulder, height: model.notch.rect.height)
-                    .allowsHitTesting(false)
-            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .transaction(value: model.outerSize) { t in
-            // Changes the engine makes (an activity starts or ends) get a gentle spring;
-            // user actions bring their own animation.
-            if t.animation == nil, !t.disablesAnimations, !model.reduceMotion { t.animation = .spring(duration: 0.45, bounce: 0.15) }
-        }
-        .environment(\.colorScheme, model.material == .black ? .dark : colorSchemeFromSystem)
     }
 
     @Environment(\.colorScheme) private var colorSchemeFromSystem
@@ -75,15 +102,18 @@ struct IslandRootView: View {
         case .black:
             shape.fill(.black)
         case .hybrid:
-            let collar = model.notch.rect.height
-            let fade = model.env.look.collarFade(open: model.isOpen)
-            let h = max(size.height, 1)
-            Rectangle().fill(.black)
-                .mask(LinearGradient(stops: [
-                    .init(color: .black, location: 0),
-                    .init(color: .black, location: min(1, collar / h)),
-                    .init(color: .clear, location: min(1, (collar + fade) / h)),
-                ], startPoint: .top, endPoint: .bottom))
+            // Sized in points, not as gradient stops relative to the height:
+            // stops were computed for the final height, so while the island
+            // grew the collar shrank, and while it shrank the whole island
+            // flashed black. Frames animate with the shape instead.
+            VStack(spacing: 0) {
+                Rectangle().fill(.black).frame(height: model.collarHeight)
+                LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom)
+                    .frame(height: model.env.look.collarFade(open: model.isOpen))
+                Spacer(minLength: 0)
+            }
+            .frame(width: size.width, height: size.height, alignment: .top)
+            .clipped()
         case .glass:
             Color.clear
         }
@@ -177,12 +207,18 @@ private struct ResizeHandles: View {
     }
 }
 
+/// Horizontal and vertical scale of the hover bounce.
+private struct Bounce {
+    var x: CGFloat = 1
+    var y: CGFloat = 1
+}
+
 extension AnyTransition {
     static var islandContent: AnyTransition {
         .asymmetric(
             insertion: .modifier(active: ContentAppear(progress: 0), identity: ContentAppear(progress: 1))
-                .animation(.easeOut(duration: 0.28).delay(0.07)),
-            removal: .opacity.animation(.easeIn(duration: 0.12))
+                .animation(IslandMotion.contentIn),
+            removal: .opacity.animation(IslandMotion.contentOut)
         )
     }
 }

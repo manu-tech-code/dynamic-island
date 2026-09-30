@@ -25,16 +25,21 @@ struct ArtworkView: View {
     let radius: CGFloat
 
     var body: some View {
-        Group {
+        ZStack {
             if let image {
                 Image(nsImage: image).resizable().interpolation(.high).aspectRatio(contentMode: .fill)
+                    .id(ObjectIdentifier(image))
+                    .transition(.opacity)
             } else {
                 LinearGradient(colors: [.pink, .purple], startPoint: .topLeading, endPoint: .bottomTrailing)
                     .overlay(Image(systemName: "music.note").font(.system(size: size * 0.45, weight: .semibold)).foregroundStyle(.white.opacity(0.9)))
+                    .transition(.opacity)
             }
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+        // A new track cross-fades its artwork instead of swapping it.
+        .animation(.easeInOut(duration: 0.3), value: image.map(ObjectIdentifier.init))
     }
 }
 
@@ -94,6 +99,61 @@ struct Waveform: View {
             .symbolEffect(.variableColor.iterative.dimInactiveLayers, options: .repeating, isActive: playing && !reduceMotion)
             .foregroundStyle(color)
             .opacity(playing ? 1 : 0.45)
+    }
+}
+
+/// One line of text that scrolls slowly when it doesn't fit, pausing at the
+/// start of each pass. With Reduce Motion it truncates instead. Only runs a
+/// timeline while it overflows and is on screen.
+struct MarqueeText: View {
+    let text: String
+    let font: Font
+    let reduceMotion: Bool
+    @State private var textWidth: CGFloat = 0
+    @State private var boxWidth: CGFloat = 0
+    @State private var start = Date()
+    private let gap: CGFloat = 32
+    private let speed: CGFloat = 30   // points per second
+    private let pause: Double = 1.6
+
+    var body: some View {
+        let scrolls = !reduceMotion && boxWidth > 0 && textWidth > boxWidth + 0.5
+        Text(text)
+            .font(font)
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .opacity(scrolls ? 0 : 1)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { boxWidth = $0 }
+            .background(alignment: .leading) {
+                Text(text).font(font).lineLimit(1).fixedSize().hidden()
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { textWidth = $0 }
+            }
+            .overlay(alignment: .leading) {
+                if scrolls {
+                    TimelineView(.animation(minimumInterval: 1.0 / 60)) { ctx in
+                        let travel = textWidth + gap
+                        let cycle = pause + Double(travel / speed)
+                        let t = ctx.date.timeIntervalSince(start).truncatingRemainder(dividingBy: cycle)
+                        let x = t < pause ? 0 : -CGFloat(t - pause) * speed
+                        HStack(spacing: gap) { Text(text); Text(text) }
+                            .font(font)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .offset(x: x)
+                            // Both bounds, so the frame takes the box's width instead of the text's.
+                            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                            .clipped()
+                            // The leading edge only fades while the text is moving.
+                            .mask(LinearGradient(stops: [.init(color: x < 0 ? .clear : .black, location: 0),
+                                                         .init(color: .black, location: 0.05),
+                                                         .init(color: .black, location: 0.88),
+                                                         .init(color: .clear, location: 1)],
+                                                 startPoint: .leading, endPoint: .trailing))
+                    }
+                    .accessibilityHidden(true)
+                }
+            }
+            .onChange(of: text) { start = .now }
     }
 }
 

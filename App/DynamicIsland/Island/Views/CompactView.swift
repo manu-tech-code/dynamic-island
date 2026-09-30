@@ -28,16 +28,44 @@ struct CompactView: View {
         let notchW = model.notch.rect.width
         let ear = max(0, (model.bodySize.width - notchW) / 2)
         let inner = max(0, ear - IslandMetrics.earOuterPadding - IslandMetrics.earInnerGap)
+        return VStack(spacing: 0) {
+            ears(primary: primary, ranked: ranked, inner: inner, notchW: notchW)
+            if let track = model.peekingTrack {
+                // The collar grows down behind it, so it reads like the ears.
+                PeekTitle(info: track, reduceMotion: model.reduceMotion)
+                    .padding(.horizontal, IslandMetrics.shoulder + IslandMetrics.earOuterPadding)
+                    .padding(.top, 2)
+                    .modifier(EarForeground(material: model.material))
+                    .modifier(MediaHotspot(model: model, key: "title"))
+                    .transition(.peekRow)
+            }
+        }
+    }
+
+    /// Each ear holds what `CompactEars` gave it: the primary's own content on
+    /// its side, then the app icons and other activities balanced across both.
+    private func ears(primary: Activity, ranked: RankedActivities, inner: CGFloat, notchW: CGFloat) -> some View {
+        let ears = model.compactFit.ears
+        let apps: [RunningAppInfo] = if case .backgroundApps(let a) = primary.payload { a } else { [] }
+        let leadingApps = Array(apps.prefix(ears.leadingApps))
+        let trailingApps = Array(apps.dropFirst(ears.leadingApps).prefix(ears.trailingApps))
+        let leadingOthers = ranked.secondaries.filter { ears.leadingSecondaries.contains($0.id) }
+        let trailingOthers = ranked.secondaries.filter { ears.trailingSecondaries.contains($0.id) }
         return HStack(spacing: 0) {
-            CompactLeading(activity: primary, model: model)
-                .frame(width: inner, alignment: .leading)
-                .padding(.leading, IslandMetrics.earOuterPadding)
-                .padding(.trailing, IslandMetrics.earInnerGap)
+            HStack(spacing: IslandMetrics.glyphSpacing) {
+                if primary.kind != .backgroundApps { CompactLeading(activity: primary, model: model) }
+                if !leadingApps.isEmpty { AppIconRow(apps: leadingApps) }
+                if !leadingOthers.isEmpty { SecondaryGlyphs(activities: leadingOthers, model: model) }
+            }
+            .frame(width: inner, alignment: .leading)
+            .padding(.leading, IslandMetrics.earOuterPadding)
+            .padding(.trailing, IslandMetrics.earInnerGap)
             Color.clear.frame(width: notchW)
             HStack(spacing: IslandMetrics.glyphSpacing) {
-                CompactTrailing(activity: primary, model: model)
-                SecondaryGlyphs(ranked: ranked, model: model)
-                if model.showsDashboardButton { DashboardButton(model: model).transition(.scale.combined(with: .opacity)) }
+                if primary.kind != .backgroundApps { CompactTrailing(activity: primary, model: model) }
+                if !trailingApps.isEmpty { AppIconRow(apps: trailingApps) }
+                if !trailingOthers.isEmpty { SecondaryGlyphs(activities: trailingOthers, model: model) }
+                if model.showsDashboardButton { DashboardButton(model: model) }
             }
             .frame(width: inner, alignment: .trailing)
             .padding(.leading, IslandMetrics.earInnerGap)
@@ -54,11 +82,23 @@ struct CompactView: View {
             Color.clear.frame(height: model.notch.rect.height)
             HStack(spacing: 8) {
                 BelowBand(activity: primary, model: model)
-                SecondaryGlyphs(ranked: ranked, model: model)
-                if model.showsDashboardButton { DashboardButton(model: model).transition(.scale.combined(with: .opacity)) }
+                if !ranked.secondaries.isEmpty { SecondaryGlyphs(activities: Array(ranked.secondaries), model: model) }
+                if model.showsDashboardButton { DashboardButton(model: model) }
             }
             .padding(.horizontal, 14)
             .frame(height: IslandMetrics.belowBand - 2)
+            if let track = model.peekingTrack, !track.artist.isEmpty {
+                // The band shows the title; the artist goes under it, aligned with it.
+                Text(track.artist)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, 14 + 18 + 8)
+                    .padding(.trailing, 14)
+                    .modifier(MediaHotspot(model: model, key: "title"))
+                    .transition(.peekRow)
+            }
         }
         .padding(.horizontal, IslandMetrics.shoulder)
         .font(.system(size: 12, weight: .semibold))
@@ -76,6 +116,7 @@ private struct CompactLeading: View {
         switch activity.payload {
         case .nowPlaying:
             ArtworkView(image: env.nowPlaying.artwork, size: 20, radius: 5)
+                .modifier(MediaHotspot(model: model, key: "artwork"))
         case .timer(let t):
             TimelineView(.periodic(from: .now, by: 1)) { ctx in
                 Ring(fraction: t.fractionRemaining(at: ctx.date), color: .orange, lineWidth: 2.5).frame(width: 17, height: 17)
@@ -84,8 +125,8 @@ private struct CompactLeading: View {
             Image(systemName: "calendar").foregroundStyle(Color(hex: e.calendarColorHex))
         case .battery:
             Image(systemName: "battery.25percent").foregroundStyle(.red)
-        case .backgroundApps(let apps):
-            AppIconRow(apps: AppSplit(apps: apps, limit: model.compactFit.iconLimit).leading)
+        case .backgroundApps:
+            EmptyView() // its icons are placed by the ears
         case .shelf, .download, .privacy:
             Phase2Leading(payload: activity.payload)
         }
@@ -114,12 +155,8 @@ private struct CompactTrailing: View {
             }
         case .battery(let b):
             Text("\(b.percent)%").monospacedDigit().foregroundStyle(.red)
-        case .backgroundApps(let apps):
-            let split = AppSplit(apps: apps, limit: model.compactFit.iconLimit)
-            HStack(spacing: IslandMetrics.glyphSpacing) {
-                AppIconRow(apps: split.trailing)
-                if split.hidden > 0 { OverflowChip(count: split.hidden) }
-            }
+        case .backgroundApps:
+            EmptyView() // its icons are placed by the ears
         case .shelf, .download, .privacy:
             Phase2Trailing(payload: activity.payload)
         }
@@ -137,7 +174,12 @@ private struct BelowBand: View {
         switch activity.payload {
         case .nowPlaying(let info):
             ArtworkView(image: env.nowPlaying.artwork, size: 18, radius: 5)
-            Text(info.title).lineLimit(1)
+                .modifier(MediaHotspot(model: model, key: "artwork"))
+            if model.peekingTrack != nil {
+                MarqueeText(text: info.title, font: .system(size: 12, weight: .semibold), reduceMotion: model.reduceMotion)
+            } else {
+                Text(info.title).lineLimit(1)
+            }
             Spacer(minLength: 4)
             Waveform(playing: info.isPlaying, color: env.nowPlaying.artworkColor.map(Color.init(nsColor:)) ?? .pink)
         case .timer(let t):
@@ -163,10 +205,8 @@ private struct BelowBand: View {
             Spacer(minLength: 4)
             Text("\(b.percent)%").monospacedDigit().foregroundStyle(.red)
         case .backgroundApps(let apps):
-            let split = AppSplit(apps: apps, limit: model.compactFit.iconLimit)
             Spacer(minLength: 0)
-            AppIconRow(apps: split.leading + split.trailing)
-            if split.hidden > 0 { OverflowChip(count: split.hidden) }
+            AppIconRow(apps: Array(apps.prefix(model.compactFit.iconLimit)))
             Spacer(minLength: 0)
         case .shelf, .download, .privacy:
             Phase2Band(payload: activity.payload)
@@ -176,37 +216,30 @@ private struct BelowBand: View {
 
 // MARK: shared pieces
 
-/// Background apps split into the two ears; the rest are counted in a chip.
-struct AppSplit {
-    let leading: [RunningAppInfo]
-    let trailing: [RunningAppInfo]
-    let hidden: Int
-
-    init(apps: [RunningAppInfo], limit: Int) {
-        let shown = Array(apps.prefix(max(1, limit)))
-        let left = Int((Double(shown.count) / 2).rounded(.up))
-        leading = Array(shown.prefix(left))
-        trailing = Array(shown.dropFirst(left))
-        hidden = apps.count - shown.count
-    }
-}
-
+/// App icons in a row. Each switches to its app, unless the row is part of a
+/// bigger button (`activates: false`).
 struct AppIconRow: View {
     let apps: [RunningAppInfo]
     var size: CGFloat = IslandMetrics.glyph
+    var activates = true
     @Environment(AppEnvironment.self) private var env
 
     var body: some View {
         HStack(spacing: IslandMetrics.glyphSpacing) {
             ForEach(apps) { app in
-                Button { env.backgroundApps.activate(app) } label: { AppIcon(app: app, size: size) }
-                    .buttonStyle(.plain)
-                    .help(app.name)
+                if activates {
+                    Button { env.backgroundApps.activate(app) } label: { AppIcon(app: app, size: size) }
+                        .buttonStyle(.plain)
+                        .help(app.name)
+                } else {
+                    AppIcon(app: app, size: size)
+                }
             }
         }
     }
 }
 
+/// "+N" for what didn't fit, in the dashboard (the compact island never shows one).
 struct OverflowChip: View {
     let count: Int
     var body: some View {
@@ -225,22 +258,26 @@ struct OverflowChip: View {
 
 /// Minimal glyphs for the activities after the primary one; click to open one.
 private struct SecondaryGlyphs: View {
-    let ranked: RankedActivities
+    let activities: [Activity]
     let model: IslandViewModel
     @Environment(AppEnvironment.self) private var env
 
     var body: some View {
-        if !ranked.secondaries.isEmpty || !ranked.overflow.isEmpty {
-            HStack(spacing: IslandMetrics.glyphSpacing) {
-                ForEach(Array(ranked.secondaries)) { a in
-                    Button { model.open(a.id) } label: { glyph(a) }
-                        .buttonStyle(.plain)
-                        .help(a.kind.displayName)
-                }
-                if !ranked.overflow.isEmpty { OverflowChip(count: ranked.overflow.count) }
+        HStack(spacing: IslandMetrics.glyphSpacing) {
+            ForEach(activities) { a in
+                Button { model.open(a.id) } label: { glyph(a) }
+                    .buttonStyle(.plain)
+                    .help(tooltip(a))
             }
-            .padding(.leading, 2)
         }
+    }
+
+    private func tooltip(_ a: Activity) -> String {
+        if case .nowPlaying(let i) = a.payload, !i.title.isEmpty {
+            return i.artist.isEmpty ? i.title : "\(i.title) — \(i.artist)"
+        }
+        if case .backgroundApps(let apps) = a.payload { return "Open apps · \(apps.count)" }
+        return a.kind.displayName
     }
 
     @ViewBuilder private func glyph(_ a: Activity) -> some View {
@@ -256,10 +293,67 @@ private struct SecondaryGlyphs: View {
             Image(systemName: "calendar").foregroundStyle(Color(hex: e.calendarColorHex)).frame(width: 20, height: 20)
         case .battery:
             Image(systemName: "battery.25percent").foregroundStyle(.red).frame(width: 20, height: 20)
-        case .backgroundApps:
-            Image(systemName: "square.grid.2x2.fill").frame(width: 20, height: 20)
+        case .backgroundApps(let apps):
+            // The first app's own icon: a grid glyph would look like the dashboard button.
+            if let first = apps.first {
+                AppIcon(app: first, size: 20)
+            } else {
+                Image(systemName: "app.dashed").frame(width: 20, height: 20)
+            }
         case .shelf, .download, .privacy:
             Phase2Glyph(payload: a.payload)
         }
+    }
+}
+
+// MARK: title on hover
+
+/// The track's title and artist under the ears, shown after the pointer rests
+/// on the compact island. Long titles scroll.
+private struct PeekTitle: View {
+    let info: NowPlayingInfo
+    let reduceMotion: Bool
+    @Environment(AppEnvironment.self) private var env
+
+    var body: some View {
+        let tint = env.nowPlaying.artworkColor.map(Color.init(nsColor:)) ?? .pink
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: "music.note")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(tint)
+            VStack(alignment: .leading, spacing: 1) {
+                MarqueeText(text: info.title, font: .system(size: 12.5, weight: .semibold), reduceMotion: reduceMotion)
+                if !info.artist.isEmpty {
+                    MarqueeText(text: info.artist, font: .system(size: 11, weight: .medium), reduceMotion: reduceMotion)
+                        .opacity(0.68)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+extension AnyTransition {
+    /// The row rides the same spring as the shape, sliding down with the
+    /// growing edge (the shape's clip reveals it), and fades out quickly.
+    static var peekRow: AnyTransition {
+        .asymmetric(
+            insertion: .opacity.combined(with: .offset(y: -8)),
+            removal: .opacity.animation(IslandMotion.peekRowOut)
+        )
+    }
+}
+
+/// Reports where the track's artwork (or its open title row) is, so the
+/// controller can show the title only while the pointer is on it.
+struct MediaHotspot: ViewModifier {
+    let model: IslandViewModel
+    let key: String
+
+    func body(content: Content) -> some View {
+        content
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(IslandRootView.space)) } action: { model.mediaRects[key] = $0 }
+            .onDisappear { model.mediaRects[key] = nil }
     }
 }
