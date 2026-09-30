@@ -11,6 +11,10 @@ private func act(_ id: String, _ kind: ActivityKind, relevance: Double = 0.5, st
     case .calendar: .calendar(CalendarEventInfo(id: id, title: id, start: t0, end: t0.addingTimeInterval(600)))
     case .battery: .battery(BatteryInfo(hasBattery: true, percent: 9, isCharging: false, isPluggedIn: false))
     case .backgroundApps: .backgroundApps([])
+    case .shelf: .shelf([])
+    case .downloads: .download(DownloadInfo(id: id, name: id))
+    case .privacy: .privacy(PrivacyInfo(microphone: true, camera: false))
+    case .devices, .hud: .backgroundApps([])
     }
     return Activity(id: id, kind: kind, payload: payload, relevance: relevance, startedAt: t0.addingTimeInterval(started))
 }

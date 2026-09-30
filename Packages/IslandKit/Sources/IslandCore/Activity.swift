@@ -4,6 +4,7 @@ import Foundation
 /// fallback; the user's priority list decides which one wins the island.
 public enum ActivityKind: String, Codable, CaseIterable, Sendable, Identifiable {
     case nowPlaying, timer, calendar, battery, backgroundApps
+    case shelf, downloads, privacy, devices, hud
 
     public var id: String { rawValue }
 
@@ -14,6 +15,11 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable, Identifiable 
         case .calendar: "Calendar"
         case .battery: "Battery"
         case .backgroundApps: "Background apps"
+        case .shelf: "Shelf"
+        case .downloads: "Downloads"
+        case .privacy: "Mic and camera"
+        case .devices: "AirPods and Bluetooth"
+        case .hud: "Volume and brightness"
         }
     }
 
@@ -24,8 +30,31 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable, Identifiable 
         case .calendar: "calendar"
         case .battery: "battery.75percent"
         case .backgroundApps: "square.grid.2x2"
+        case .shelf: "tray.full"
+        case .downloads: "arrow.down.circle"
+        case .privacy: "mic.fill"
+        case .devices: "airpodspro"
+        case .hud: "speaker.wave.2.fill"
         }
     }
+
+    /// Kinds that can sit on the compact island. The others only raise alerts
+    /// (devices) or HUDs (volume and brightness).
+    public var canBeLive: Bool { self != .devices && self != .hud }
+
+    /// Defaults for a module the user hasn't touched. The HUD needs
+    /// Accessibility, so it starts off.
+    public var defaultModule: ModuleSettings {
+        switch self {
+        case .hud: ModuleSettings(enabled: false, showInCompact: false)
+        case .devices: ModuleSettings(enabled: true, showInCompact: false)
+        default: ModuleSettings()
+        }
+    }
+
+    public static let defaultPriority: [ActivityKind] = [
+        .calendar, .nowPlaying, .timer, .downloads, .privacy, .battery, .shelf, .backgroundApps,
+    ]
 }
 
 public struct NowPlayingInfo: Equatable, Sendable {
@@ -142,12 +171,96 @@ public struct RunningAppInfo: Equatable, Sendable, Identifiable {
     }
 }
 
+public enum ShelfItemKind: String, Codable, Sendable {
+    case file, folder, image, text, link
+}
+
+/// Something kept on the shelf. Files are referenced by path (and bookmark,
+/// in the app); text, links and images dropped in are saved as files.
+public struct ShelfItemInfo: Equatable, Sendable, Codable, Identifiable {
+    public var id: UUID
+    public var name: String
+    public var kind: ShelfItemKind
+    public var path: String
+    public var addedAt: Date
+
+    public init(id: UUID = UUID(), name: String, kind: ShelfItemKind, path: String, addedAt: Date = Date()) {
+        self.id = id; self.name = name; self.kind = kind; self.path = path; self.addedAt = addedAt
+    }
+}
+
+public struct DownloadInfo: Equatable, Sendable, Identifiable {
+    public var id: String
+    public var name: String
+    /// 0…1 when the browser reports it.
+    public var fraction: Double?
+    public var completedBytes: Int64?
+    public var totalBytes: Int64?
+    public var startedAt: Date
+
+    public init(id: String, name: String, fraction: Double? = nil, completedBytes: Int64? = nil, totalBytes: Int64? = nil, startedAt: Date = Date()) {
+        self.id = id; self.name = name; self.fraction = fraction
+        self.completedBytes = completedBytes; self.totalBytes = totalBytes; self.startedAt = startedAt
+    }
+}
+
+public struct PrivacyInfo: Equatable, Sendable {
+    public var microphone: Bool
+    public var camera: Bool
+
+    public init(microphone: Bool, camera: Bool) {
+        self.microphone = microphone; self.camera = camera
+    }
+}
+
+public enum BluetoothDeviceKind: String, Codable, Sendable {
+    case airpods, airpodsPro, airpodsMax, beats, headphones, speaker, keyboard, mouse, trackpad, gameController, other
+
+    public var symbolName: String {
+        switch self {
+        case .airpods: "airpods"
+        case .airpodsPro: "airpodspro"
+        case .airpodsMax: "airpodsmax"
+        case .beats: "beats.headphones"
+        case .headphones: "headphones"
+        case .speaker: "hifispeaker.fill"
+        case .keyboard: "keyboard"
+        case .mouse: "computermouse"
+        case .trackpad: "rectangle.and.hand.point.up.left"
+        case .gameController: "gamecontroller"
+        case .other: "dot.radiowaves.left.and.right"
+        }
+    }
+}
+
+public struct BluetoothDeviceInfo: Equatable, Sendable, Identifiable {
+    public var id: String
+    public var name: String
+    public var kind: BluetoothDeviceKind
+    /// Battery percentages where the device reports them (AirPods report three).
+    public var battery: Int?
+    public var batteryLeft: Int?
+    public var batteryRight: Int?
+    public var batteryCase: Int?
+
+    public init(id: String, name: String, kind: BluetoothDeviceKind, battery: Int? = nil,
+                batteryLeft: Int? = nil, batteryRight: Int? = nil, batteryCase: Int? = nil) {
+        self.id = id; self.name = name; self.kind = kind; self.battery = battery
+        self.batteryLeft = batteryLeft; self.batteryRight = batteryRight; self.batteryCase = batteryCase
+    }
+
+    public var hasBattery: Bool { battery != nil || batteryLeft != nil || batteryRight != nil || batteryCase != nil }
+}
+
 public enum ActivityPayload: Equatable, Sendable {
     case nowPlaying(NowPlayingInfo)
     case timer(TimerInfo)
     case calendar(CalendarEventInfo)
     case battery(BatteryInfo)
     case backgroundApps([RunningAppInfo])
+    case shelf([ShelfItemInfo])
+    case download(DownloadInfo)
+    case privacy(PrivacyInfo)
 }
 
 /// Something live that competes for space on the island.
@@ -172,6 +285,19 @@ public struct IslandAlert: Identifiable, Equatable, Sendable {
         case lowBattery(percent: Int)
         case timerFinished(label: String)
         case eventStarting(CalendarEventInfo)
+        case deviceConnected(BluetoothDeviceInfo)
+        case deviceDisconnected(name: String, kind: BluetoothDeviceKind)
+        case downloadFinished(name: String, path: String)
+        case volume(level: Double, muted: Bool, output: String)
+        case brightness(level: Double)
+    }
+
+    /// HUDs update in place while a key is held, instead of queueing.
+    public var isHUD: Bool {
+        switch style {
+        case .volume, .brightness: true
+        default: false
+        }
     }
 
     public var id: UUID

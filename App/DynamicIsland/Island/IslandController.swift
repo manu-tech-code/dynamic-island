@@ -134,6 +134,21 @@ final class IslandController: NSObject {
         if model.isOpen, !inside { scheduleCollapse(after: 6) }
     }
 
+    func openShelfForDrag() {
+        guard !model.isOpen || model.presentation == .shelf else { return }
+        Log.info("shelf: opened by a drag")
+        model.openShelf(byDrag: true)
+    }
+
+    /// The drag let go. If it wasn't dropped on the island, put the shelf away.
+    func dragEnded() {
+        Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(600))
+            guard let self, self.model.shelfOpenedByDrag, !self.inside else { return }
+            self.model.collapse()
+        }
+    }
+
     /// Opens Now Playing on a page (from a link or shortcut).
     func showNowPlaying(page: NowPlayingPage) {
         guard let id = env.engine.live.first(where: { $0.kind == .nowPlaying })?.id else { return }
@@ -192,6 +207,9 @@ final class IslandController: NSObject {
             add(menu, "Next Track", #selector(menuNext))
         }
         if env.engine.alert != nil { add(menu, "Dismiss Alert", #selector(menuDismissAlert)) }
+        if model.settings[module: .shelf].enabled {
+            add(menu, env.shelf.items.isEmpty ? "Open Shelf" : "Open Shelf (\(env.shelf.items.count))", #selector(menuShelf))
+        }
         menu.addItem(.separator())
 
         let style = NSMenuItem(title: "Compact Style", action: nil, keyEquivalent: "")
@@ -235,6 +253,7 @@ final class IslandController: NSObject {
 
     @objc private func menuToggle() { model.isOpen ? model.collapse() : model.openDashboard() }
     @objc private func menuPlayPause() { env.nowPlaying.togglePlayPause() }
+    @objc private func menuShelf() { model.openShelf() }
     @objc private func menuNext() { env.nowPlaying.next() }
     @objc private func menuDismissAlert() { env.engine.dismissAlert() }
     @objc private func menuSettings() { env.openSettings() }

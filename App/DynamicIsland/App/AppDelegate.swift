@@ -42,7 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// `dynamicisland://` links, for Shortcuts and scripts:
-    ///   dashboard · collapse · settings · timer?minutes=5&label=Tea · play-pause · next · lyrics · up-next
+    ///   dashboard · shelf · collapse · settings · timer?minutes=5&label=Tea · play-pause · next · lyrics · up-next
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls { handle(url) }
     }
@@ -60,6 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "timer":
             let minutes = Double(query["minutes"] ?? "") ?? 5
             env.timers.start(minutes: minutes, label: query["label"].flatMap { $0.isEmpty ? nil : $0 })
+        case "shelf": islands.primary?.model.openShelf()
         case "lyrics": islands.primary?.showNowPlaying(page: .lyrics)
         case "up-next": islands.primary?.showNowPlaying(page: .upNext)
         case "play-pause": env.nowPlaying.togglePlayPause()
@@ -95,6 +96,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     Log.info("render \(name) \(Int(img.size.width))×\(Int(img.size.height)) outer \(model.outerSize)")
                 }
             }
+        case "debug-phase2":
+            Log.info("shortcuts: \(env.shortcuts.all.count) available")
+            Log.info("devices: \(env.devices.connected.map { "\($0.name) [\($0.kind)] \(DevicesModuleSettings.batteryText($0))" })")
+            Log.info("privacy: mic \(env.privacy.microphone) camera \(env.privacy.camera)")
+            Log.info("clipboard access: \(env.clipboard.accessBehavior.rawValue), brightness \(Brightness.get().map { String(format: "%.2f", $0) } ?? "n/a"), AX \(env.hud.accessibilityTrusted)")
+            Task {
+                // Apple Park, so no location prompt is needed for the check.
+                if let url = OpenMeteo.forecastURL(latitude: 37.33, longitude: -122.01, fahrenheit: true),
+                   let (data, _) = try? await URLSession.shared.data(from: url), let r = OpenMeteo.parseForecast(data) {
+                    Log.info("weather check: \(Int(r.temperature))° \(r.condition.summary) H\(r.high.map { Int($0) } ?? 0) hours \(r.hours.count)")
+                } else { Log.error("weather check failed") }
+            }
+        case "debug-render-widgets":
+            let model = IslandViewModel(env: env, notch: NotchRect(rect: CGRect(x: 0, y: 0, width: 185, height: 32), isHardware: false))
+            let slot = DashboardView.slot
+            func save(_ view: some View, _ name: String) {
+                let r = ImageRenderer(content: view.environment(env).environment(\.colorScheme, .dark))
+                r.scale = 1
+                if let img = r.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+                    try? rep.representation(using: .png, properties: [:])?.write(to: Log.fileURL.deletingLastPathComponent().appendingPathComponent("render-\(name).png"))
+                }
+            }
+            let kinds: [DashboardWidgetKind] = [.weather, .shelf, .clipboard, .shortcuts, .devices]
+            let grid = VStack(alignment: .leading, spacing: 10) {
+                ForEach(kinds) { k in
+                    HStack(spacing: 10) {
+                        WidgetView(item: DashboardItem(k, .small), radius: 22, model: model).frame(width: slot, height: DashboardLayout.cardHeight)
+                        WidgetView(item: DashboardItem(k, .medium), radius: 22, model: model).frame(width: DashboardView.width(.medium), height: DashboardLayout.cardHeight)
+                    }
+                }
+            }.padding(14).background(Color(white: 0.12))
+            save(grid, "widgets")
+            model.forced = .shelf
+            save(ShelfView(model: model).frame(width: 612, height: 216).background(Color(white: 0.12)), "shelf")
+            model.forced = .alert(IslandAlert(kind: .hud, style: .volume(level: 0.6, muted: false, output: "Speakers")))
+            save(IslandRootView(model: model).frame(width: 760, height: 120).background(Color(white: 0.3)), "hud")
+            Log.info("rendered widgets, shelf and hud")
         case "debug-music":
             let probes = ["player state", "class of current track", "index of current track", "name of container of current track",
                           "class of container of current track", "count of tracks of container of current track",

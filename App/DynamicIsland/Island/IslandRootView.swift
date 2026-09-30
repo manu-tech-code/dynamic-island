@@ -30,6 +30,19 @@ struct IslandRootView: View {
                 .shadow(color: .black.opacity(model.material == .black ? 0.3 : 0), radius: 10, y: 4)
                 .contentShape(shape)
                 .onTapGesture { model.tap() }
+                // Anything dropped on the island, in any state, goes to the shelf.
+                .onDrop(of: [.fileURL, .url, .image, .plainText], isTargeted: Binding(
+                    get: { model.dropTargeted }, set: { model.setDropTargeted($0) })) { providers in
+                    guard !model.isPreview, model.settings[module: .shelf].enabled else { return false }
+                    let ok = model.env.shelf.accept(providers: providers)
+                    if ok { model.didDrop() }
+                    return ok
+                }
+                .overlay {
+                    if model.dropTargeted {
+                        shape.stroke(Color.accentColor, lineWidth: 2).allowsHitTesting(false)
+                    }
+                }
 
             if !model.notch.isHardware {
                 // Displays without a camera housing get a virtual one.
@@ -110,6 +123,8 @@ struct IslandContent: View {
             }
         case .dashboard:
             DashboardView(model: model)
+        case .shelf:
+            ShelfView(model: model)
         case .alert(let alert):
             AlertView(alert: alert, model: model)
         }

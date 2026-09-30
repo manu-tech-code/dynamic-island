@@ -7,13 +7,17 @@ struct AlertView: View {
     let model: IslandViewModel
 
     var body: some View {
-        VStack(spacing: 0) {
-            Color.clear.frame(height: model.notch.rect.height)
-            HStack(spacing: 14) { content }
-                .padding(.horizontal, 22)
-                .frame(maxHeight: .infinity)
+        if alert.isHUD {
+            HUDView(style: alert.style, model: model)
+        } else {
+            VStack(spacing: 0) {
+                Color.clear.frame(height: model.notch.rect.height)
+                HStack(spacing: 14) { content }
+                    .padding(.horizontal, 22)
+                    .frame(maxHeight: .infinity)
+            }
+            .padding(.horizontal, IslandMetrics.shoulder)
         }
-        .padding(.horizontal, IslandMetrics.shoulder)
     }
 
     @ViewBuilder private var content: some View {
@@ -37,6 +41,16 @@ struct AlertView: View {
             titles("Timer done", label)
             Spacer()
             IslandCapsuleButton(title: "Dismiss") { model.env.engine.dismissAlert() }
+        case .deviceConnected(let device):
+            DeviceAlertContent(device: device)
+        case .deviceDisconnected(let name, let kind):
+            symbol(kind.symbolName, .secondary)
+            titles(name, "Disconnected")
+            Spacer()
+        case .downloadFinished(let name, let path):
+            DownloadAlertContent(name: name, path: path, model: model)
+        case .volume, .brightness:
+            EmptyView()
         case .eventStarting(let e):
             symbol("calendar", Color(hex: e.calendarColorHex))
             titles(e.title, "Starting now")

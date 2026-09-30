@@ -9,6 +9,10 @@ final class IslandManager {
     private(set) var controllers: [CGDirectDisplayID: IslandController] = [:]
     private var monitors: [Any] = []
     private var screenObserver: NSObjectProtocol?
+    /// Drag pasteboard change count at the last mouse-down; a new count while
+    /// dragging means a real drag with content (not a window move or selection).
+    private var dragBaseline = NSPasteboard(name: .drag).changeCount
+    private var dragOpenedShelf = false
 
     init(env: AppEnvironment) {
         self.env = env
@@ -64,6 +68,26 @@ final class IslandManager {
         }
     }
 
+    /// Opens the shelf when a drag carrying files, images, links or text comes
+    /// near the top of the screen around the notch.
+    private func checkDragTowardNotch(at p: NSPoint) {
+        let s = env.settings.settings
+        guard !dragOpenedShelf, s[module: .shelf].enabled, s.shelf.openOnDrag else { return }
+        let pb = NSPasteboard(name: .drag)
+        guard pb.changeCount != dragBaseline else { return }
+        let types = Set(pb.types ?? [])
+        let carries: [NSPasteboard.PasteboardType] = [.fileURL, .URL, .png, .tiff, .string]
+        guard !types.isDisjoint(with: carries),
+              let screen = NSScreen.screens.first(where: { $0.frame.contains(p) }),
+              let c = controllers[Self.displayID(screen)] else { return }
+        let notch = c.model.notch.rect
+        let nearTop = p.y >= screen.frame.maxY - s.shelf.dragActivationDistance
+        let nearNotch = abs(p.x - notch.midX) <= IslandMetrics.shelf.width / 2 + 60
+        guard nearTop, nearNotch else { return }
+        dragOpenedShelf = true
+        c.openShelfForDrag()
+    }
+
     static func displayID(_ screen: NSScreen) -> CGDirectDisplayID {
         (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
     }
@@ -71,13 +95,13 @@ final class IslandManager {
     // MARK: mouse
 
     private func installMonitors() {
-        let global: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .leftMouseDown, .rightMouseDown]
+        let global: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .leftMouseDown, .leftMouseUp, .rightMouseDown]
         if let m = NSEvent.addGlobalMonitorForEvents(matching: global, handler: { [weak self] event in
             let type = event.type
             _ = MainActor.assumeIsolated { self?.handle(type: type, event: nil) }
         }) { monitors.append(m) }
 
-        let local: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .leftMouseDown, .rightMouseDown, .scrollWheel]
+        let local: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .leftMouseDown, .leftMouseUp, .rightMouseDown, .scrollWheel]
         if let m = NSEvent.addLocalMonitorForEvents(matching: local, handler: { [weak self] event in
             let consumed = MainActor.assumeIsolated { self?.handle(type: event.type, event: event) ?? false }
             return consumed ? nil : event
@@ -88,10 +112,19 @@ final class IslandManager {
     private func handle(type: NSEvent.EventType, event: NSEvent?) -> Bool {
         let p = NSEvent.mouseLocation
         switch type {
-        case .mouseMoved, .leftMouseDragged:
+        case .mouseMoved:
+            controllers.values.forEach { $0.pointerMoved(to: p) }
+        case .leftMouseDragged:
+            if event == nil { checkDragTowardNotch(at: p) }
             controllers.values.forEach { $0.pointerMoved(to: p) }
         case .leftMouseDown:
+            dragBaseline = NSPasteboard(name: .drag).changeCount
             controllers.values.forEach { $0.mouseDownOutside(at: p) }
+        case .leftMouseUp:
+            if dragOpenedShelf {
+                dragOpenedShelf = false
+                controllers.values.forEach { $0.dragEnded() }
+            }
         case .rightMouseDown:
             if let c = controllers.values.first(where: { $0.contains(p) }) {
                 c.showMenu()

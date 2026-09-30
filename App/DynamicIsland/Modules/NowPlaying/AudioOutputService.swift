@@ -35,6 +35,11 @@ final class AudioOutputService {
     private(set) var defaultID: AudioDeviceID = 0
     /// 0…1, nil when the device has no software volume (some HDMI outputs).
     private(set) var volume: Float?
+    private(set) var muted = false
+    /// Called when the volume or mute state changes from anywhere (keys,
+    /// Control Center, another app); drives the island's volume HUD.
+    @ObservationIgnored var onVolumeChange: ((Float, Bool) -> Void)?
+    @ObservationIgnored private var muteListener: (device: AudioDeviceID, block: AudioObjectPropertyListenerBlock)?
 
     @ObservationIgnored private var started = false
     @ObservationIgnored private var volumeListener: (device: AudioDeviceID, block: AudioObjectPropertyListenerBlock)?
@@ -61,6 +66,14 @@ final class AudioOutputService {
         let def = Self.uint32(AudioObjectID(kAudioObjectSystemObject), kAudioHardwarePropertyDefaultOutputDevice) ?? 0
         if def != defaultID { defaultID = def; watchVolume(of: def) }
         volume = Self.volume(of: def)
+        muted = Self.mute(of: def) ?? false
+    }
+
+    func setMuted(_ on: Bool) {
+        var v: UInt32 = on ? 1 : 0
+        var addr = Self.address(kAudioDevicePropertyMute, scope: kAudioDevicePropertyScopeOutput)
+        guard AudioObjectHasProperty(defaultID, &addr) else { return }
+        if AudioObjectSetPropertyData(defaultID, &addr, 0, nil, UInt32(MemoryLayout<UInt32>.size), &v) == noErr { muted = on }
     }
 
     func select(_ device: AudioOutputDevice) {
@@ -79,19 +92,32 @@ final class AudioOutputService {
     }
 
     private func watchVolume(of device: AudioDeviceID) {
-        if let old = volumeListener {
-            var addr = Self.address(kAudioHardwareServiceDeviceProperty_VirtualMainVolume, scope: kAudioDevicePropertyScopeOutput)
-            AudioObjectRemovePropertyListenerBlock(old.device, &addr, .main, old.block)
-            volumeListener = nil
-        }
+        var volAddr = Self.address(kAudioHardwareServiceDeviceProperty_VirtualMainVolume, scope: kAudioDevicePropertyScopeOutput)
+        var muteAddr = Self.address(kAudioDevicePropertyMute, scope: kAudioDevicePropertyScopeOutput)
+        if let old = volumeListener { AudioObjectRemovePropertyListenerBlock(old.device, &volAddr, .main, old.block); volumeListener = nil }
+        if let old = muteListener { AudioObjectRemovePropertyListenerBlock(old.device, &muteAddr, .main, old.block); muteListener = nil }
         guard device != 0 else { return }
-        let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-            MainActor.assumeIsolated { self?.volume = Self.volume(of: device) }
+        let changed: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.volume = Self.volume(of: device)
+                self.muted = Self.mute(of: device) ?? false
+                if let v = self.volume { self.onVolumeChange?(v, self.muted) }
+            }
         }
-        var addr = Self.address(kAudioHardwareServiceDeviceProperty_VirtualMainVolume, scope: kAudioDevicePropertyScopeOutput)
-        if AudioObjectAddPropertyListenerBlock(device, &addr, .main, block) == noErr {
-            volumeListener = (device, block)
+        if AudioObjectAddPropertyListenerBlock(device, &volAddr, .main, changed) == noErr { volumeListener = (device, changed) }
+        if AudioObjectHasProperty(device, &muteAddr), AudioObjectAddPropertyListenerBlock(device, &muteAddr, .main, changed) == noErr {
+            muteListener = (device, changed)
         }
+    }
+
+    private static func mute(of id: AudioDeviceID) -> Bool? {
+        guard id != 0 else { return nil }
+        var addr = address(kAudioDevicePropertyMute, scope: kAudioDevicePropertyScopeOutput)
+        guard AudioObjectHasProperty(id, &addr) else { return nil }
+        var v: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        return AudioObjectGetPropertyData(id, &addr, 0, nil, &size, &v) == noErr ? v != 0 : nil
     }
 
     // MARK: CoreAudio helpers

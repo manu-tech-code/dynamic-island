@@ -338,6 +338,9 @@ private struct DashboardPane: View {
                 Text("CPU, memory, storage and network are only measured while the dashboard is open.")
                     .font(.callout).foregroundStyle(.secondary)
             }
+            WeatherSettingsSection()
+            ClipboardSettingsSection()
+            ShortcutsSettingsSection()
         }
     }
 }
@@ -408,6 +411,11 @@ extension DashboardWidgetKind {
         case .memory: .mint
         case .storage: .purple
         case .network: .cyan
+        case .weather: .cyan
+        case .shelf: .teal
+        case .clipboard: .brown
+        case .shortcuts: .pink
+        case .devices: .indigo
         }
     }
 }
@@ -472,8 +480,10 @@ private struct ModulesPane: View {
             ForEach(ActivityKind.allCases) { kind in
                 Section {
                     Toggle("On", isOn: module(kind, \.enabled))
-                    Toggle("Show on the compact island", isOn: module(kind, \.showInCompact))
-                        .disabled(!store.settings[module: kind].enabled)
+                    if kind.canBeLive {
+                        Toggle("Show on the compact island", isOn: module(kind, \.showInCompact))
+                            .disabled(!store.settings[module: kind].enabled)
+                    }
                     details(kind, store: store)
                         .disabled(!store.settings[module: kind].enabled)
                 } header: {
@@ -491,6 +501,11 @@ private struct ModulesPane: View {
         case .calendar: "Your next event with a countdown and a Join button"
         case .battery: "Charging and low-battery moments"
         case .backgroundApps: "Apps running behind the one you're using; click to switch"
+        case .shelf: "Drag files toward the notch to park them; drag them out, AirDrop or share"
+        case .downloads: "Progress for downloads arriving in your Downloads folder"
+        case .privacy: "Shows when an app is using your microphone or a camera"
+        case .devices: "AirPods and Bluetooth devices connecting, with their batteries"
+        case .hud: "A volume and brightness HUD on the island instead of the system one"
         }
     }
 
@@ -519,7 +534,8 @@ private struct ModulesPane: View {
         case .timer:
             Toggle("Play a sound when a timer ends", isOn: $store.settings.timers.playSound)
             LabeledContent("Presets (minutes)") {
-                TextField("1, 5, 10, 25, 60", text: $presetsText)
+                TextField("", text: $presetsText, prompt: Text("1, 5, 10, 25, 60"))
+                    .labelsHidden()
                     .frame(width: 200)
                     .onSubmit(savePresets)
             }
@@ -546,6 +562,13 @@ private struct ModulesPane: View {
                         store.settings.battery.lowBatteryPercents = list.sorted(by: >)
                     }))
             }
+        case .shelf: ShelfModuleSettings()
+        case .downloads: Toggle("Alert when a download finishes", isOn: $store.settings.downloads.alertWhenDone)
+        case .privacy:
+            Toggle("Microphone", isOn: $store.settings.privacy.showMicrophone)
+            Toggle("Camera", isOn: $store.settings.privacy.showCamera)
+        case .devices: DevicesModuleSettings()
+        case .hud: HUDModuleSettings()
         case .backgroundApps:
             Stepper(value: $store.settings.backgroundApps.maxIcons, in: 1...24) {
                 LabeledContent("Icons on the compact island", value: "\(store.settings.backgroundApps.maxIcons)")
@@ -613,6 +636,28 @@ private struct PermissionsPane: View {
                               status: music.label) {
                     automationButton(bundleID: MusicScripting.bundleID, status: music) { music = $0 }
                 }
+                PermissionRow(title: "Accessibility", symbol: "accessibility", color: .blue,
+                              reason: "Only for the volume and brightness HUD, to take over those keys",
+                              status: env.hud.accessibilityTrusted ? "Allowed" : "Not allowed") {
+                    if !env.hud.accessibilityTrusted {
+                        Button("Allow") { env.hud.requestAccessibility() }
+                    }
+                }
+                PermissionRow(title: "Location", symbol: "location.fill", color: .cyan,
+                              reason: "Weather where you are, rounded to about 1 km",
+                              status: LocationText.status(env.weather.authorization)) {
+                    if env.weather.authorization == .notDetermined {
+                        Button("Allow") { env.settings.settings.weather.useCurrentLocation = true; env.weather.refresh() }
+                    } else if env.weather.authorization == .denied {
+                        Button("Open Settings") { LocationText.openSettings() }
+                    }
+                }
+                PermissionRow(title: "Bluetooth", symbol: "dot.radiowaves.left.and.right", color: .indigo,
+                              reason: "AirPods and other devices connecting, with batteries",
+                              status: env.settings.settings[module: .devices].enabled ? "Asked when first used" : "Module off") { EmptyView() }
+                PermissionRow(title: "Downloads folder", symbol: "arrow.down.circle.fill", color: .blue,
+                              reason: "Progress of downloads arriving there",
+                              status: env.settings.settings[module: .downloads].enabled ? "Asked when first used" : "Module off") { EmptyView() }
                 PermissionRow(title: "Automation · Spotify", symbol: "music.note.list", color: .green,
                               reason: "Fallback track info if system Now Playing is unavailable",
                               status: spotify.label) {
@@ -625,6 +670,8 @@ private struct PermissionsPane: View {
             }
             Section("What leaves your Mac") {
                 LabeledContent("Lyrics", value: "Title, artist, album and length go to lrclib.net, only when you open lyrics")
+                LabeledContent("Weather", value: "Coordinates rounded to about 1 km go to open-meteo.com, only while a weather widget is on your dashboard")
+                LabeledContent("Clipboard", value: "Off unless you turn it on; history stays in memory and is never sent anywhere")
                 LabeledContent("Everything else", value: "Stays on this Mac")
             }
         }

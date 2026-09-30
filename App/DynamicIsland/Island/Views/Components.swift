@@ -183,6 +183,11 @@ extension ActivityKind {
         case .calendar: .red
         case .battery: .green
         case .backgroundApps: .blue
+        case .shelf: .teal
+        case .downloads: .blue
+        case .privacy: .orange
+        case .devices: .indigo
+        case .hud: .gray
         }
     }
 }

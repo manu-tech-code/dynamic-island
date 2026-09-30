@@ -19,6 +19,9 @@ import Testing
         case .calendar: .calendar
         case .battery: .battery
         case .backgroundApps: .backgroundApps
+        case .shelf: .shelf
+        case .download: .downloads
+        case .privacy: .privacy
         }
     }
 

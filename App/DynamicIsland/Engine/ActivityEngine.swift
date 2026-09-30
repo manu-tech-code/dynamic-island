@@ -52,6 +52,29 @@ final class ActivityEngine {
         if self.alert == nil { showNext() }
     }
 
+    /// Shows or updates a HUD (volume, brightness). While a key is held the
+    /// HUD updates in place and its hold restarts; it never queues.
+    func showHUD(_ hud: IslandAlert) {
+        guard settings.settings[module: .hud].enabled else { return }
+        if let current = alert, current.isHUD {
+            alert = IslandAlert(id: current.id, kind: hud.kind, style: hud.style, holdSeconds: hud.holdSeconds)
+        } else if alert == nil {
+            alert = hud
+        } else {
+            return // a real alert is showing; it wins
+        }
+        alertTask?.cancel()
+        let hold = hud.holdSeconds
+        alertTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(hold))
+            guard !Task.isCancelled else { return }
+            self?.alert = nil
+            try? await Task.sleep(for: .milliseconds(450))
+            guard !Task.isCancelled else { return }
+            self?.showNext()
+        }
+    }
+
     func dismissAlert() {
         alertTask?.cancel()
         alert = nil

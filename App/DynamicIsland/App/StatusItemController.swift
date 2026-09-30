@@ -21,6 +21,7 @@ final class StatusItemController: NSObject {
             item.button?.image = NSImage(systemSymbolName: "rectangle.topthird.inset.filled", accessibilityDescription: "Dynamic Island")
             let menu = NSMenu()
             menu.addItem(withTitle: "Open Dashboard", action: #selector(openDashboard), keyEquivalent: "i").keyEquivalentModifierMask = [.command, .option]
+            menu.addItem(withTitle: "Open Shelf", action: #selector(openShelf), keyEquivalent: "")
             menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
             menu.addItem(.separator())
             menu.addItem(withTitle: "Quit Dynamic Island", action: #selector(quit), keyEquivalent: "q")
@@ -35,5 +36,6 @@ final class StatusItemController: NSObject {
 
     @objc private func openDashboard() { islands.toggleDashboard() }
     @objc private func openSettings() { env.openSettings() }
+    @objc private func openShelf() { islands.primary?.model.openShelf() }
     @objc private func quit() { NSApp.terminate(nil) }
 }

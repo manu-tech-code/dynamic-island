@@ -34,6 +34,7 @@ permissions (Calendars, Automation) between builds.
 - Click the island to expand it; click an idle island for the dashboard.
 - Scroll down on the island to open, up to close. Right-click for the menu.
 - <kbd>⌥⌘I</kbd> opens or closes the dashboard from anywhere.
+- Drag a file toward the notch to open the shelf; drop to keep it, drag it out later.
 - Settings: right-click › Settings…, or open the app again from Finder.
 
 ### Links for Shortcuts and scripts
@@ -42,6 +43,7 @@ permissions (Calendars, Automation) between builds.
 open "dynamicisland://dashboard"
 open "dynamicisland://timer?minutes=25&label=Focus"
 open "dynamicisland://play-pause"     # also: next, previous, collapse, settings
+open "dynamicisland://shelf"          # also: lyrics, up-next
 ```
 
 Log file: `~/Library/Logs/DynamicIsland/DynamicIsland.log`

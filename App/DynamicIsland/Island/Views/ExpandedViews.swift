@@ -21,6 +21,9 @@ struct ExpandedView: View {
         case .calendar(let e): CalendarExpanded(event: e, model: model)
         case .battery(let b): BatteryExpanded(info: b, model: model)
         case .backgroundApps(let apps): BackgroundAppsExpanded(apps: apps, model: model)
+        case .shelf: ShelfView(model: model)
+        case .download: DownloadsExpanded(model: model)
+        case .privacy(let p): PrivacyExpanded(info: p, model: model)
         }
     }
 }

@@ -9,7 +9,7 @@ enum NowPlayingPage: Equatable { case player, lyrics, upNext }
 /// click does. The engine decides what's live; this adds what the user opened.
 @Observable
 final class IslandViewModel {
-    enum UserState: Equatable { case none, expanded(String), dashboard }
+    enum UserState: Equatable { case none, expanded(String), dashboard, shelf }
 
     let env: AppEnvironment
     var notch: NotchRect
@@ -38,6 +38,7 @@ final class IslandViewModel {
         switch userState {
         case .expanded(let id) where engine.activity(id: id) != nil: return .expanded(activityID: id)
         case .dashboard: return .dashboard
+        case .shelf: return .shelf
         default: return ranked.isEmpty ? .idle : .compact
         }
     }
@@ -61,7 +62,8 @@ final class IslandViewModel {
 
     /// Lyrics and Up Next scroll, so scrolling there mustn't close the island.
     var hasScrollableContent: Bool {
-        expandedActivity?.kind == .nowPlaying && nowPlayingPage != .player
+        if presentation == .shelf || expandedActivity?.kind == .shelf { return true }
+        return expandedActivity?.kind == .nowPlaying && nowPlayingPage != .player
     }
 
     /// Identity of the content; a change swaps content with a transition.
@@ -71,6 +73,7 @@ final class IslandViewModel {
         case .compact: "compact-\(settings.compactStyle.rawValue)"
         case .expanded(let id): "expanded-\(id)-\(nowPlayingPage)"
         case .dashboard: "dashboard"
+        case .shelf: "shelf"
         case .alert(let a): "alert-\(a.id)"
         }
     }
@@ -144,7 +147,7 @@ final class IslandViewModel {
         case .idle: openDashboard()
         case .compact:
             if let primary = ranked.primary { open(primary.id) } else { openDashboard() }
-        case .expanded, .dashboard: collapse()
+        case .expanded, .dashboard, .shelf: collapse()
         case .alert: env.engine.dismissAlert()
         }
     }
@@ -159,12 +162,38 @@ final class IslandViewModel {
         animate(open: true) { userState = .dashboard }
     }
 
+    /// A drag carrying something is near the notch, or a drop is hovering.
+    private(set) var dropTargeted = false
+    /// The shelf was opened by a drag, so it closes again if nothing is dropped.
+    private(set) var shelfOpenedByDrag = false
+
+    func openShelf(byDrag: Bool = false) {
+        guard userState != .shelf else { return }
+        env.look.refresh()
+        shelfOpenedByDrag = byDrag
+        animate(open: true) { userState = .shelf }
+    }
+
+    func setDropTargeted(_ on: Bool) {
+        guard dropTargeted != on else { return }
+        withAnimation(.snappy(duration: 0.2)) { dropTargeted = on }
+    }
+
+    /// Something was dropped on the island: keep the shelf open for it.
+    func didDrop() {
+        shelfOpenedByDrag = false
+        dropTargeted = false
+        if userState != .shelf { openShelf() }
+    }
+
     func toggleDashboard() {
         if userState == .dashboard { collapse() } else { openDashboard() }
     }
 
     func collapse() {
         guard userState != .none else { return }
+        shelfOpenedByDrag = false
+        dropTargeted = false
         animate(open: false) { userState = .none; nowPlayingPage = .player }
     }
 

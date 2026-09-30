@@ -19,7 +19,7 @@ import Testing
         #expect(s.backgroundApps.maxIcons == 6)
         #expect(s.backgroundApps.excludedBundleIDs == ["com.apple.finder"])
         #expect(s.compactStyle == .beside)
-        #expect(s.priority.count == ActivityKind.allCases.count)
+        #expect(s.priority.count == ActivityKind.allCases.filter(\.canBeLive).count)
     }
 
     @Test func garbageFallsBackToDefaults() {
@@ -29,8 +29,8 @@ import Testing
     @Test func normalizesPriorityAndClamps() {
         let s = IslandSettings.decode(#"{"priority":["timer","timer","bogus"],"maxActivities":99,"hoverDelayMs":-5}"#.data(using: .utf8)!)
         #expect(s.priority.first == .timer)
-        #expect(Set(s.priority) == Set(ActivityKind.allCases))
-        #expect(s.priority.count == ActivityKind.allCases.count)
+        #expect(Set(s.priority) == Set(ActivityKind.allCases.filter(\.canBeLive)))
+        #expect(s.priority.count == ActivityKind.allCases.filter(\.canBeLive).count)
         #expect(s.maxActivities == 12)
         #expect(s.hoverDelayMs == 0)
     }

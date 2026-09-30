@@ -32,6 +32,10 @@ struct DashboardView: View {
                     Text("\(env.battery.info.percent)%").monospacedDigit()
                     Image(systemName: env.battery.info.isCharging ? "battery.100percent.bolt" : "battery.75percent")
                 }
+                if s[module: .shelf].enabled {
+                    IslandIconButton(systemName: env.shelf.items.isEmpty ? "tray" : "tray.full.fill", size: 24,
+                                     label: env.shelf.items.isEmpty ? "Shelf" : "Shelf, \(env.shelf.items.count) items") { model.openShelf() }
+                }
                 IslandIconButton(systemName: "gearshape.fill", size: 24, label: "Settings") { env.openSettings() }
             }
             if rows.isEmpty {
@@ -45,7 +49,7 @@ struct DashboardView: View {
                     ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
                         HStack(spacing: DashboardLayout.spacing) {
                             ForEach(row) { item in
-                                WidgetView(item: item, radius: cardRadius)
+                                WidgetView(item: item, radius: cardRadius, model: model)
                                     .frame(width: Self.width(item.size), height: DashboardLayout.cardHeight)
                             }
                         }
@@ -67,6 +71,7 @@ struct DashboardView: View {
 struct WidgetView: View {
     let item: DashboardItem
     let radius: CGFloat
+    let model: IslandViewModel
 
     var body: some View {
         IslandCard(title: item.kind.displayName, symbol: item.kind.symbolName, radius: radius) {
@@ -79,6 +84,11 @@ struct WidgetView: View {
             case .memory: MemoryWidget()
             case .storage: StorageWidget()
             case .network: NetworkWidget(size: item.size)
+            case .weather: WeatherWidget(size: item.size)
+            case .shelf: ShelfWidget(size: item.size, model: model)
+            case .clipboard: ClipboardWidget(size: item.size)
+            case .shortcuts: ShortcutsWidget(size: item.size)
+            case .devices: DevicesWidget(size: item.size)
             }
         }
     }

@@ -34,7 +34,7 @@ import Testing
     }
 
     @Test func settingsDecodeWidgetsAndSkipUnknownKinds() {
-        let json = #"{"dashboard":[{"kind":"cpu","size":"medium"},{"kind":"weather","size":"small"},{"kind":"cpu","size":"small"},{"kind":"battery","size":"medium"}]}"#
+        let json = #"{"dashboard":[{"kind":"cpu","size":"medium"},{"kind":"hologram","size":"small"},{"kind":"cpu","size":"small"},{"kind":"battery","size":"medium"}]}"#
         let s = IslandSettings.decode(Data(json.utf8))
         #expect(s.dashboard == [DashboardItem(.cpu, .medium), DashboardItem(.battery, .small)])
     }

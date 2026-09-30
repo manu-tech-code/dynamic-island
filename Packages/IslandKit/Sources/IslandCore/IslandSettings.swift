@@ -31,7 +31,7 @@ public struct NowPlayingSettings: Codable, Equatable, Sendable {
     /// Look up lyrics on LRCLIB when the lyrics page is opened. Only then are
     /// the track title, artist, album and length sent to lrclib.net.
     public var lyricsEnabled: Bool = true
-    /// Show the next track (Apple Music) under the artist.
+    /// Show the next track under the artist.
     public var showUpNext: Bool = true
     public init() {}
 }
@@ -68,6 +68,80 @@ public struct BatterySettings: Codable, Equatable, Sendable {
     public init() {}
 }
 
+public struct ShelfSettings: Codable, Equatable, Sendable {
+    /// Open the shelf when a file is dragged toward the notch.
+    public var openOnDrag: Bool = true
+    /// How close to the top of the screen a drag must come, in points.
+    public var dragActivationDistance: Double = 80
+    public init() {}
+}
+
+public struct DownloadsSettings: Codable, Equatable, Sendable {
+    public var alertWhenDone: Bool = true
+    public init() {}
+}
+
+public struct DevicesSettings: Codable, Equatable, Sendable {
+    /// Alert when headphones, speakers or other Bluetooth devices connect.
+    public var alertOnConnect: Bool = true
+    public var alertOnDisconnect: Bool = false
+    public init() {}
+}
+
+public struct HUDSettings: Codable, Equatable, Sendable {
+    /// Take over the volume and brightness keys so only the island's HUD
+    /// shows. Needs Accessibility permission.
+    public var replaceSystemHUD: Bool = true
+    public var showVolume: Bool = true
+    public var showBrightness: Bool = true
+    /// Volume keys move in sixteenths, like macOS; ⌥⇧ gives quarter steps.
+    public var steps: Int = 16
+    public init() {}
+}
+
+public enum TemperatureUnit: String, Codable, CaseIterable, Sendable, Identifiable {
+    case automatic, celsius, fahrenheit
+    public var id: String { rawValue }
+    public var displayName: String {
+        switch self {
+        case .automatic: "Automatic"
+        case .celsius: "Celsius"
+        case .fahrenheit: "Fahrenheit"
+        }
+    }
+}
+
+public struct WeatherSettings: Codable, Equatable, Sendable {
+    /// Use Location Services; otherwise `placeName` / coordinates below.
+    public var useCurrentLocation: Bool = true
+    public var placeName: String?
+    public var latitude: Double?
+    public var longitude: Double?
+    public var unit: TemperatureUnit = .automatic
+    public init() {}
+}
+
+public struct ClipboardSettings: Codable, Equatable, Sendable {
+    /// Off until turned on: watching the clipboard is opt-in.
+    public var enabled: Bool = false
+    public var historySize: Int = 20
+    /// Skip items that password managers mark as concealed or transient.
+    public var ignoreConcealed: Bool = true
+    public init() {}
+}
+
+public struct ShortcutsSettings: Codable, Equatable, Sendable {
+    /// Shortcut names shown on the dashboard, in order.
+    public var pinned: [String] = []
+    public init() {}
+}
+
+public struct PrivacySettings: Codable, Equatable, Sendable {
+    public var showMicrophone: Bool = true
+    public var showCamera: Bool = true
+    public init() {}
+}
+
 /// Everything the user can configure. Stored as JSON; unknown or missing keys
 /// fall back to defaults so older files keep working as fields are added.
 public struct IslandSettings: Codable, Equatable, Sendable {
@@ -75,7 +149,7 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     public var compactStyle: CompactStyle = .beside
     /// How many live activities share the compact island. 0 means unlimited.
     public var maxActivities: Int = 3
-    public var priority: [ActivityKind] = [.calendar, .nowPlaying, .timer, .battery, .backgroundApps]
+    public var priority: [ActivityKind] = ActivityKind.defaultPriority
     public var openOnHover: Bool = false
     public var hoverDelayMs: Int = 150
     public var collapseOnMouseLeave: Bool = true
@@ -83,11 +157,9 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     public var displays: DisplayMode = .builtIn
     public var showMenuBarIcon: Bool = true
 
-    public var nowPlayingModule = ModuleSettings()
-    public var timerModule = ModuleSettings()
-    public var calendarModule = ModuleSettings()
-    public var batteryModule = ModuleSettings(enabled: true, showInCompact: true)
-    public var backgroundAppsModule = ModuleSettings()
+    /// Per-module on/off and compact visibility, keyed by `ActivityKind.rawValue`.
+    /// Missing entries use `ActivityKind.defaultModule`.
+    public var modules: [String: ModuleSettings] = [:]
 
     public var nowPlaying = NowPlayingSettings()
     public var backgroundApps = BackgroundAppsSettings()
@@ -95,6 +167,14 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     public var timers = TimerSettings()
     public var battery = BatterySettings()
     public var systemStats = SystemStatsSettings()
+    public var shelf = ShelfSettings()
+    public var downloads = DownloadsSettings()
+    public var devices = DevicesSettings()
+    public var hud = HUDSettings()
+    public var weather = WeatherSettings()
+    public var clipboard = ClipboardSettings()
+    public var shortcuts = ShortcutsSettings()
+    public var privacy = PrivacySettings()
     public var dashboard: [DashboardItem] = DashboardItem.defaults
 
     public init() {}
@@ -104,24 +184,8 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     public var activityLimit: Int? { maxActivities <= 0 ? nil : maxActivities }
 
     public subscript(module kind: ActivityKind) -> ModuleSettings {
-        get {
-            switch kind {
-            case .nowPlaying: nowPlayingModule
-            case .timer: timerModule
-            case .calendar: calendarModule
-            case .battery: batteryModule
-            case .backgroundApps: backgroundAppsModule
-            }
-        }
-        set {
-            switch kind {
-            case .nowPlaying: nowPlayingModule = newValue
-            case .timer: timerModule = newValue
-            case .calendar: calendarModule = newValue
-            case .battery: batteryModule = newValue
-            case .backgroundApps: backgroundAppsModule = newValue
-            }
-        }
+        get { modules[kind.rawValue] ?? kind.defaultModule }
+        set { modules[kind.rawValue] = newValue }
     }
 
     /// Dashboard widgets whose module is on, in the user's order.
@@ -132,10 +196,10 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     public var dashboardRows: Int { max(1, DashboardLayout.rows(visibleDashboard).count) }
 
     public var compactKinds: Set<ActivityKind> {
-        Set(ActivityKind.allCases.filter { self[module: $0].enabled && self[module: $0].showInCompact })
+        Set(ActivityKind.allCases.filter { $0.canBeLive && self[module: $0].enabled && self[module: $0].showInCompact })
     }
 
-    /// Clamps values and repairs the priority list (every kind exactly once).
+    /// Clamps values and repairs the priority list (every live kind exactly once).
     public func normalized() -> IslandSettings {
         var s = self
         s.maxActivities = min(max(s.maxActivities, Self.maxActivitiesRange.lowerBound), Self.maxActivitiesRange.upperBound)
@@ -143,15 +207,20 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         s.backgroundApps.maxIcons = min(max(s.backgroundApps.maxIcons, 1), 24)
         s.calendar.leadMinutes = min(max(s.calendar.leadMinutes, 0), 120)
         s.nowPlaying.keepPausedMinutes = min(max(s.nowPlaying.keepPausedMinutes, 0), 120)
+        s.clipboard.historySize = min(max(s.clipboard.historySize, 5), 100)
+        s.hud.steps = min(max(s.hud.steps, 4), 64)
+        s.shelf.dragActivationDistance = min(max(s.shelf.dragActivationDistance, 20), 300)
         var seen = Set<ActivityKind>()
-        s.priority = s.priority.filter { seen.insert($0).inserted }
-        for k in ActivityKind.allCases where !seen.contains(k) { s.priority.append(k) }
+        s.priority = s.priority.filter { $0.canBeLive && seen.insert($0).inserted }
+        for k in ActivityKind.defaultPriority where !seen.contains(k) { s.priority.append(k) }
         s.timers.presetMinutes = Array(Set(s.timers.presetMinutes.filter { $0 > 0 && $0 <= 24 * 60 })).sorted()
         s.systemStats.refreshSeconds = min(max(s.systemStats.refreshSeconds, 0.5), 10)
         var seenWidgets = Set<DashboardWidgetKind>()
         s.dashboard = s.dashboard
             .filter { seenWidgets.insert($0.kind).inserted }
             .map { DashboardItem($0.kind, $0.size) }
+        var seenShortcuts = Set<String>()
+        s.shortcuts.pinned = s.shortcuts.pinned.filter { !$0.isEmpty && seenShortcuts.insert($0).inserted }
         return s
     }
 
@@ -159,9 +228,14 @@ public struct IslandSettings: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case material, compactStyle, maxActivities, priority, openOnHover, hoverDelayMs, collapseOnMouseLeave
-        case glowFromArtwork, displays, showMenuBarIcon
+        case glowFromArtwork, displays, showMenuBarIcon, modules
+        case nowPlaying, backgroundApps, calendar, timers, battery, systemStats
+        case shelf, downloads, devices, hud, weather, clipboard, shortcuts, privacy, dashboard
+    }
+
+    /// Per-module keys from version 0.1, read once and folded into `modules`.
+    private enum LegacyKeys: String, CodingKey {
         case nowPlayingModule, timerModule, calendarModule, batteryModule, backgroundAppsModule
-        case nowPlaying, backgroundApps, calendar, timers, battery, systemStats, dashboard
     }
 
     public init(from decoder: Decoder) throws {
@@ -181,17 +255,23 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         glowFromArtwork = v(.glowFromArtwork, d.glowFromArtwork)
         displays = v(.displays, d.displays)
         showMenuBarIcon = v(.showMenuBarIcon, d.showMenuBarIcon)
-        nowPlayingModule = v(.nowPlayingModule, d.nowPlayingModule)
-        timerModule = v(.timerModule, d.timerModule)
-        calendarModule = v(.calendarModule, d.calendarModule)
-        batteryModule = v(.batteryModule, d.batteryModule)
-        backgroundAppsModule = v(.backgroundAppsModule, d.backgroundAppsModule)
-        nowPlaying = v(.nowPlaying, d.nowPlaying)
-        backgroundApps = v(.backgroundApps, d.backgroundApps)
-        calendar = v(.calendar, d.calendar)
-        timers = v(.timers, d.timers)
-        battery = v(.battery, d.battery)
-        systemStats = v(.systemStats, d.systemStats)
+        modules = c.tolerant(.modules, [String: ModuleSettings]())
+
+        nowPlaying = c.tolerant(.nowPlaying, d.nowPlaying)
+        backgroundApps = c.tolerant(.backgroundApps, d.backgroundApps)
+        calendar = c.tolerant(.calendar, d.calendar)
+        timers = c.tolerant(.timers, d.timers)
+        battery = c.tolerant(.battery, d.battery)
+        systemStats = c.tolerant(.systemStats, d.systemStats)
+        shelf = c.tolerant(.shelf, d.shelf)
+        downloads = c.tolerant(.downloads, d.downloads)
+        devices = c.tolerant(.devices, d.devices)
+        hud = c.tolerant(.hud, d.hud)
+        weather = c.tolerant(.weather, d.weather)
+        clipboard = c.tolerant(.clipboard, d.clipboard)
+        shortcuts = c.tolerant(.shortcuts, d.shortcuts)
+        privacy = c.tolerant(.privacy, d.privacy)
+
         // Unknown widget kinds (from a newer version) are skipped, not fatal.
         if let raw = try? c.decodeIfPresent([[String: String]].self, forKey: .dashboard) {
             dashboard = raw.compactMap { item in
@@ -200,6 +280,15 @@ public struct IslandSettings: Codable, Equatable, Sendable {
             }
         } else {
             dashboard = d.dashboard
+        }
+
+        if let legacy = try? decoder.container(keyedBy: LegacyKeys.self) {
+            let pairs: [(LegacyKeys, ActivityKind)] = [(.nowPlayingModule, .nowPlaying), (.timerModule, .timer),
+                                                       (.calendarModule, .calendar), (.batteryModule, .battery),
+                                                       (.backgroundAppsModule, .backgroundApps)]
+            for (key, kind) in pairs where modules[kind.rawValue] == nil {
+                if let m = legacy.tolerantOptional(key, kind.defaultModule) { modules[kind.rawValue] = m }
+            }
         }
         self = normalized()
     }
@@ -215,53 +304,9 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     }
 }
 
-// Sub-settings decode tolerantly too, so a file missing one nested key keeps the rest.
-extension NowPlayingSettings {
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        keepPausedMinutes = (try? c.decodeIfPresent(Int.self, forKey: .keepPausedMinutes)) ?? 3
-        lyricsEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .lyricsEnabled)) ?? true
-        showUpNext = (try? c.decodeIfPresent(Bool.self, forKey: .showUpNext)) ?? true
-    }
-}
-extension SystemStatsSettings {
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        refreshSeconds = (try? c.decodeIfPresent(Double.self, forKey: .refreshSeconds)) ?? 1
-    }
-}
-extension BackgroundAppsSettings {
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        maxIcons = (try? c.decodeIfPresent(Int.self, forKey: .maxIcons)) ?? 4
-        excludedBundleIDs = (try? c.decodeIfPresent([String].self, forKey: .excludedBundleIDs)) ?? ["com.apple.finder"]
-    }
-}
-extension CalendarSettings {
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        leadMinutes = (try? c.decodeIfPresent(Int.self, forKey: .leadMinutes)) ?? 15
-        alertAtStart = (try? c.decodeIfPresent(Bool.self, forKey: .alertAtStart)) ?? true
-    }
-}
-extension TimerSettings {
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        presetMinutes = (try? c.decodeIfPresent([Int].self, forKey: .presetMinutes)) ?? [1, 5, 10, 25, 60]
-        playSound = (try? c.decodeIfPresent(Bool.self, forKey: .playSound)) ?? true
-    }
-}
-extension BatterySettings {
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        alertOnPower = (try? c.decodeIfPresent(Bool.self, forKey: .alertOnPower)) ?? true
-        lowBatteryPercents = (try? c.decodeIfPresent([Int].self, forKey: .lowBatteryPercents)) ?? [20, 10]
-    }
-}
-extension ModuleSettings {
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        enabled = (try? c.decodeIfPresent(Bool.self, forKey: .enabled)) ?? true
-        showInCompact = (try? c.decodeIfPresent(Bool.self, forKey: .showInCompact)) ?? true
+extension KeyedDecodingContainer {
+    /// Like `tolerant`, but nil when the key is absent.
+    func tolerantOptional<T: Codable>(_ key: Key, _ fallback: T) -> T? {
+        contains(key) ? tolerant(key, fallback) : nil
     }
 }

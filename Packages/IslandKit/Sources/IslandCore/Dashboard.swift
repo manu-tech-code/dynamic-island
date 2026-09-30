@@ -11,6 +11,7 @@ public enum WidgetSize: String, Codable, CaseIterable, Sendable, Identifiable {
 /// Everything that can sit on the dashboard.
 public enum DashboardWidgetKind: String, Codable, CaseIterable, Sendable, Identifiable {
     case nowPlaying, calendar, timer, battery, cpu, memory, storage, network
+    case weather, shelf, clipboard, shortcuts, devices
 
     public var id: String { rawValue }
 
@@ -24,6 +25,11 @@ public enum DashboardWidgetKind: String, Codable, CaseIterable, Sendable, Identi
         case .memory: "Memory"
         case .storage: "Storage"
         case .network: "Network"
+        case .weather: "Weather"
+        case .shelf: "Shelf"
+        case .clipboard: "Clipboard"
+        case .shortcuts: "Shortcuts"
+        case .devices: "Devices"
         }
     }
 
@@ -37,6 +43,11 @@ public enum DashboardWidgetKind: String, Codable, CaseIterable, Sendable, Identi
         case .memory: "memorychip"
         case .storage: "internaldrive"
         case .network: "arrow.up.arrow.down"
+        case .weather: "cloud.sun.fill"
+        case .shelf: "tray.full"
+        case .clipboard: "doc.on.clipboard"
+        case .shortcuts: "square.stack.3d.forward.dottedline"
+        case .devices: "airpodspro"
         }
     }
 
@@ -50,12 +61,17 @@ public enum DashboardWidgetKind: String, Codable, CaseIterable, Sendable, Identi
         case .memory: "Memory in use and pressure"
         case .storage: "Free space on your startup disk"
         case .network: "Download and upload speed"
+        case .weather: "Conditions now and the next hours"
+        case .shelf: "Files you dropped on the island"
+        case .clipboard: "Recent copies, click to copy again"
+        case .shortcuts: "Run your Shortcuts in one click"
+        case .devices: "Connected AirPods and Bluetooth batteries"
         }
     }
 
     public var allowedSizes: [WidgetSize] {
         switch self {
-        case .nowPlaying, .calendar, .cpu, .network: [.small, .medium]
+        case .nowPlaying, .calendar, .cpu, .network, .weather, .shelf, .clipboard, .shortcuts, .devices: [.small, .medium]
         case .timer, .battery, .memory, .storage: [.small]
         }
     }
@@ -67,11 +83,13 @@ public enum DashboardWidgetKind: String, Codable, CaseIterable, Sendable, Identi
         case .calendar: .calendar
         case .timer: .timer
         case .battery: .battery
-        case .cpu, .memory, .storage, .network: nil
+        case .shelf: .shelf
+        case .devices: .devices
+        case .cpu, .memory, .storage, .network, .weather, .clipboard, .shortcuts: nil
         }
     }
 
-    public var isSystemStat: Bool { module == nil }
+    public var isSystemStat: Bool { [.cpu, .memory, .storage, .network].contains(self) }
 }
 
 public struct DashboardItem: Codable, Equatable, Hashable, Sendable, Identifiable {

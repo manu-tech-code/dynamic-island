@@ -16,6 +16,14 @@ final class AppEnvironment {
     let audioOutput: AudioOutputService
     let lyrics: LyricsService
     let systemStats: SystemStatsService
+    let shelf: ShelfService
+    let downloads: DownloadsService
+    let privacy: PrivacyIndicatorService
+    let devices: DevicesService
+    let hud: HUDService
+    let weather: WeatherService
+    let clipboard: ClipboardService
+    let shortcuts: ShortcutsService
 
     @ObservationIgnored var openSettings: () -> Void = {}
 
@@ -33,7 +41,16 @@ final class AppEnvironment {
         audioOutput = AudioOutputService()
         lyrics = LyricsService(settings: settings)
         systemStats = SystemStatsService(settings: settings)
-        [nowPlaying, timers, battery, calendar, backgroundApps].forEach(engine.register)
+        shelf = ShelfService()
+        downloads = DownloadsService(settings: settings, engine: engine)
+        privacy = PrivacyIndicatorService(settings: settings)
+        devices = DevicesService(settings: settings, engine: engine)
+        hud = HUDService(settings: settings, engine: engine, audio: audioOutput)
+        weather = WeatherService(settings: settings)
+        clipboard = ClipboardService(settings: settings)
+        shortcuts = ShortcutsService()
+        let providers: [ActivityProvider] = [nowPlaying, timers, battery, calendar, backgroundApps, shelf, downloads, privacy]
+        providers.forEach(engine.register)
     }
 
     func start() {
@@ -42,9 +59,28 @@ final class AppEnvironment {
         calendar.start()
         backgroundApps.start()
         audioOutput.start()
+        hud.start()
+        clipboard.start()
+        shortcuts.reload()
+        // Modules that ask for permission start only when they're on.
+        whenChanged({ [settings] in settings.settings[module: .downloads].enabled }) { [weak self] on in
+            on ? self?.downloads.start() : self?.downloads.stop()
+        }
+        whenChanged({ [settings] in settings.settings[module: .devices].enabled }) { [weak self] on in
+            if on { self?.devices.start() }
+        }
+        whenChanged({ [settings] in settings.settings.dashboard.map(\.kind.rawValue) }) { [weak self] _ in
+            self?.weather.updateDemand()
+        }
+        let s = settings.settings
+        if s[module: .downloads].enabled { downloads.start() }
+        if s[module: .devices].enabled { devices.start() }
+        if s[module: .privacy].enabled { privacy.start() }
+        weather.updateDemand()
     }
 
     func stop() {
         nowPlaying.stop()
+        downloads.stop()
     }
 }

@@ -75,6 +75,8 @@ private struct CompactLeading: View {
             Image(systemName: "battery.25percent").foregroundStyle(.red)
         case .backgroundApps(let apps):
             AppIconRow(apps: AppSplit(apps: apps, limit: model.settings.backgroundApps.maxIcons).leading)
+        case .shelf, .download, .privacy:
+            Phase2Leading(payload: activity.payload)
         }
     }
 }
@@ -107,6 +109,8 @@ private struct CompactTrailing: View {
                 AppIconRow(apps: split.trailing)
                 if split.hidden > 0 { OverflowChip(count: split.hidden) }
             }
+        case .shelf, .download, .privacy:
+            Phase2Trailing(payload: activity.payload)
         }
     }
 }
@@ -153,6 +157,8 @@ private struct BelowBand: View {
             AppIconRow(apps: split.leading + split.trailing)
             if split.hidden > 0 { OverflowChip(count: split.hidden) }
             Spacer(minLength: 0)
+        case .shelf, .download, .privacy:
+            Phase2Band(payload: activity.payload)
         }
     }
 }
@@ -241,6 +247,8 @@ private struct SecondaryGlyphs: View {
             Image(systemName: "battery.25percent").foregroundStyle(.red).frame(width: 20, height: 20)
         case .backgroundApps:
             Image(systemName: "square.grid.2x2.fill").frame(width: 20, height: 20)
+        case .shelf, .download, .privacy:
+            Phase2Glyph(payload: a.payload)
         }
     }
 }

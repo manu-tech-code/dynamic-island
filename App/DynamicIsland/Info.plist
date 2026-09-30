@@ -38,11 +38,19 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Dynamic Island reads the current track from Music or Spotify when the system Now Playing source is unavailable.</string>
+	<string>Dynamic Island reads Up Next and AirPlay speakers from Music, and track info from Spotify when the system Now Playing source is unavailable.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Dynamic Island shows AirPods and other Bluetooth devices, with their batteries, when they connect.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Dynamic Island shows your next event and a Join button on the island.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Dynamic Island shows the progress of downloads arriving in your Downloads folder.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Personal project</string>
+	<key>NSLocationUsageDescription</key>
+	<string>Dynamic Island shows the weather where you are. Coordinates are rounded to about 1 km.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Dynamic Island shows the weather where you are. Coordinates are rounded to about 1 km.</string>
 	<key>NSPrefersDisplaySafeAreaCompatibilityMode</key>
 	<false/>
 </dict>

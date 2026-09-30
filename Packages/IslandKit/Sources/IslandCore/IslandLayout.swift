@@ -40,11 +40,12 @@ public enum IslandPresentation: Equatable, Sendable {
     case compact
     case expanded(activityID: String)
     case dashboard
+    case shelf
     case alert(IslandAlert)
 
     public var isOpen: Bool {
         switch self {
-        case .expanded, .dashboard: true
+        case .expanded, .dashboard, .shelf: true
         default: false
         }
     }
@@ -82,6 +83,9 @@ public enum IslandMetrics {
         case .calendar: return 34
         case .battery: return 30
         case .backgroundApps(let apps): return iconRowWidth(count: Int((Double(apps.count) / 2).rounded(.up)))
+        case .shelf: return 34
+        case .download: return 38
+        case .privacy: return 22
         }
     }
 
@@ -142,13 +146,28 @@ public enum IslandMetrics {
         case .calendar: CGSize(width: 480, height: 164)
         case .battery: CGSize(width: 420, height: 124)
         case .backgroundApps: CGSize(width: 560, height: 176)
+        case .shelf: CGSize(width: 600, height: 216)
+        case .downloads: CGSize(width: 460, height: 132)
+        case .privacy: CGSize(width: 400, height: 112)
+        case .devices: CGSize(width: 460, height: 150)
+        case .hud: CGSize(width: 420, height: 100)
         }
     }
 
-    public static func alertSize(for style: IslandAlert.Style) -> CGSize {
+    /// The shelf, opened by a drag or a click; also the drop target.
+    public static let shelf = CGSize(width: 600, height: 216)
+
+    public static func alertSize(for style: IslandAlert.Style, notch: CGSize = CGSize(width: 185, height: 32),
+                                 compactStyle: CompactStyle = .beside) -> CGSize {
         switch style {
-        case .eventStarting: CGSize(width: 460, height: 96)
-        default: CGSize(width: 400, height: 88)
+        case .volume, .brightness:
+            // The HUD lives where compact content does: in the ears, or in the band below.
+            return compactStyle == .beside
+                ? CGSize(width: notch.width + 2 * 116, height: notch.height)
+                : CGSize(width: max(notch.width + 24, 280), height: notch.height + belowBand)
+        case .eventStarting, .deviceConnected: return CGSize(width: 460, height: 100)
+        case .downloadFinished: return CGSize(width: 460, height: 88)
+        default: return CGSize(width: 400, height: 88)
         }
     }
 
@@ -169,7 +188,7 @@ public enum IslandMetrics {
         switch presentation {
         case .idle: CGSize(width: 16, height: 4)
         case .compact: CGSize(width: 12, height: 4)
-        case .expanded, .dashboard: CGSize(width: 4, height: 2)
+        case .expanded, .dashboard, .shelf: CGSize(width: 4, height: 2)
         case .alert: .zero
         }
     }
@@ -184,7 +203,8 @@ public enum IslandMetrics {
             guard let a = ranked.all.first(where: { $0.id == id }) else { return DashboardLayout.size(rows: dashboardRows, notchHeight: notch.height) }
             return expandedSize(for: a.kind)
         case .dashboard: return DashboardLayout.size(rows: dashboardRows, notchHeight: notch.height)
-        case .alert(let alert): return alertSize(for: alert.style)
+        case .shelf: return shelf
+        case .alert(let alert): return alertSize(for: alert.style, notch: notch, compactStyle: style)
         }
     }
 }

@@ -49,7 +49,11 @@ targets:
         LSUIElement: true
         NSPrefersDisplaySafeAreaCompatibilityMode: false
         NSCalendarsFullAccessUsageDescription: Dynamic Island shows your next event and a Join button on the island.
-        NSAppleEventsUsageDescription: Dynamic Island reads the current track from Music or Spotify when the system Now Playing source is unavailable.
+        NSAppleEventsUsageDescription: Dynamic Island reads Up Next and AirPlay speakers from Music, and track info from Spotify when the system Now Playing source is unavailable.
+        NSBluetoothAlwaysUsageDescription: Dynamic Island shows AirPods and other Bluetooth devices, with their batteries, when they connect.
+        NSLocationUsageDescription: Dynamic Island shows the weather where you are. Coordinates are rounded to about 1 km.
+        NSLocationWhenInUseUsageDescription: Dynamic Island shows the weather where you are. Coordinates are rounded to about 1 km.
+        NSDownloadsFolderUsageDescription: Dynamic Island shows the progress of downloads arriving in your Downloads folder.
         NSHumanReadableCopyright: Personal project
         CFBundleURLTypes:
           - CFBundleURLName: com.dynamicisland.mac
@@ -59,6 +63,7 @@ targets:
       properties:
         com.apple.security.automation.apple-events: true
         com.apple.security.personal-information.calendars: true
+        com.apple.security.personal-information.location: true
     settings:
       base:
         PRODUCT_NAME: DynamicIsland
