@@ -34,7 +34,8 @@ permissions (Calendars, Automation) between builds.
 
 - Click the island to expand it; click an idle island for the dashboard.
 - The grid button (on hover, or always — Settings › Layout) opens the dashboard in one click.
-- Drag the left or right edge of the open island to change its width.
+- Drag the left or right edge of the island, compact or open, to change its width. The same
+  width applies to both (also in Settings › Layout › Width, or Narrow/Standard/Wide in the menu).
 - Scroll down on the island to open, up to close. Right-click for the menu.
 - <kbd>⌥⌘I</kbd> (changeable in Settings › General) opens the dashboard from anywhere; <kbd>Esc</kbd> closes it.
 - Drag a file toward the notch to open the shelf; drop to keep it, drag it out later.
