@@ -1,0 +1,16 @@
+# macOS
+.DS_Store
+
+# Xcode / XcodeGen (the project is generated from project.yml)
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+
+# SwiftPM
+.build/
+.swiftpm/
+
+# Local build output
+build/
+Spikes/build/
