@@ -214,7 +214,7 @@ public struct PrivacyInfo: Equatable, Sendable {
 }
 
 public enum BluetoothDeviceKind: String, Codable, Sendable {
-    case airpods, airpodsPro, airpodsMax, beats, headphones, speaker, keyboard, mouse, trackpad, gameController, other
+    case airpods, airpodsPro, airpodsMax, beats, earbuds, headphones, speaker, keyboard, mouse, trackpad, gameController, other
 
     public var symbolName: String {
         switch self {
@@ -222,6 +222,7 @@ public enum BluetoothDeviceKind: String, Codable, Sendable {
         case .airpodsPro: "airpodspro"
         case .airpodsMax: "airpodsmax"
         case .beats: "beats.headphones"
+        case .earbuds: "earbuds"
         case .headphones: "headphones"
         case .speaker: "hifispeaker.fill"
         case .keyboard: "keyboard"
@@ -230,6 +231,86 @@ public enum BluetoothDeviceKind: String, Codable, Sendable {
         case .gameController: "gamecontroller"
         case .other: "dot.radiowaves.left.and.right"
         }
+    }
+
+    public var isAudio: Bool {
+        switch self {
+        case .airpods, .airpodsPro, .airpodsMax, .beats, .earbuds, .headphones, .speaker: true
+        default: false
+        }
+    }
+
+    /// Bluetooth class of device values (the Assigned Numbers spec).
+    public static let majorAudio: UInt32 = 0x04
+    public static let majorPeripheral: UInt32 = 0x05
+    static let minorHeadphones: UInt32 = 0x06
+    static let speakerMinors: Set<UInt32> = [0x05, 0x07, 0x0A] // loudspeaker, portable, hi-fi
+
+    /// Any maker's device. Names come first (many devices report no useful
+    /// class, and a soundbar can call itself a "headset"), then the class.
+    public static func classify(name: String, majorClass: UInt32, minorClass: UInt32) -> BluetoothDeviceKind {
+        let n = name.lowercased()
+        func has(_ words: String...) -> Bool { words.contains { n.contains($0) } }
+        if has("airpods max") { return .airpodsMax }
+        if has("airpods pro") { return .airpodsPro }
+        if has("airpods") { return .airpods }
+        if has("beats", "powerbeats") { return .beats }
+        if has("keyboard") { return .keyboard }
+        if has("trackpad") { return .trackpad }
+        if has("mouse") { return .mouse }
+        if has("controller", "dualsense", "xbox") { return .gameController }
+        // Galaxy Buds, oraimo FreePods and SpaceBuds, Pixel Buds, Huawei FreeBuds, Sony WF-…, TWS…
+        if has("buds", "pods", "tws", "earbud", "earphone", "wf-", "freeclip", "in-ear") { return .earbuds }
+        if has("speaker", "boom", "soundlink", "soundbar", "flip", "charge") { return .speaker }
+        switch majorClass {
+        case majorAudio:
+            if speakerMinors.contains(minorClass) { return .speaker }
+            return .headphones
+        default:
+            return .other
+        }
+    }
+}
+
+/// Battery levels from macOS's own Bluetooth report (`system_profiler
+/// SPBluetoothDataType -json`), which includes other makers' earbuds and
+/// headphones that send their level. Keyed by address, "aa:bb:cc:dd:ee:ff".
+public enum BluetoothBatteryReport {
+    public struct Levels: Equatable, Sendable {
+        public var main: Int?, left: Int?, right: Int?, `case`: Int?
+        public init(main: Int? = nil, left: Int? = nil, right: Int? = nil, case: Int? = nil) {
+            self.main = main; self.left = left; self.right = right; self.case = `case`
+        }
+        public var isEmpty: Bool { main == nil && left == nil && right == nil && `case` == nil }
+    }
+
+    /// IOBluetooth writes "82-06-20-00-16-cd"; the report writes "82:06:20:00:16:CD".
+    public static func normalize(_ address: String) -> String {
+        address.lowercased().replacingOccurrences(of: "-", with: ":")
+    }
+
+    public static func parse(_ data: Data) -> [String: Levels] {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let sections = root["SPBluetoothDataType"] as? [[String: Any]] else { return [:] }
+        func percent(_ value: Any?) -> Int? {
+            guard let s = value as? String, let v = Int(s.trimmingCharacters(in: CharacterSet(charactersIn: "% "))),
+                  (1...100).contains(v) else { return nil }
+            return v
+        }
+        var result: [String: Levels] = [:]
+        for section in sections {
+            for entry in section["device_connected"] as? [[String: Any]] ?? [] {
+                for case let props as [String: Any] in entry.values {
+                    guard let address = props["device_address"] as? String else { continue }
+                    let levels = Levels(main: percent(props["device_batteryLevelMain"] ?? props["device_batteryLevel"]),
+                                        left: percent(props["device_batteryLevelLeft"]),
+                                        right: percent(props["device_batteryLevelRight"]),
+                                        case: percent(props["device_batteryLevelCase"]))
+                    if !levels.isEmpty { result[normalize(address)] = levels }
+                }
+            }
+        }
+        return result
     }
 }
 

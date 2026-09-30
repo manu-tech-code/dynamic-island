@@ -127,6 +127,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                            batteryLeft: 82, batteryRight: 64, batteryCase: 45)
             let styles: [(String, IslandAlert.Style, Bool)] = [
                 ("airpods", .deviceConnected(pods), false), ("airpods-hover", .deviceConnected(pods), true),
+                ("oraimo", .deviceConnected(BluetoothDeviceInfo(id: "o", name: "oraimo SpaceBuds", kind: .earbuds,
+                                                                 batteryLeft: 70, batteryRight: 18)), true),
                 ("charger", .chargerConnected(percent: 80), false), ("low", .lowBattery(percent: 9), false),
                 ("disconnected", .deviceDisconnected(name: "AirPods Pro", kind: .airpodsPro), false)]
             let saved = env.settings.settings.compactStyle
