@@ -562,6 +562,13 @@ private struct ModulesPane: View {
             Stepper(value: $store.settings.nowPlaying.keepPausedMinutes, in: 0...30) {
                 LabeledContent("Keep a paused track for", value: "\(store.settings.nowPlaying.keepPausedMinutes) min")
             }
+            Toggle(isOn: $store.settings.nowPlaying.titleOnHover) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Show the title when the pointer rests on the island")
+                    Text("The song and artist appear under the compact island; long titles scroll.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
             Toggle("Show the next track under the artist", isOn: $store.settings.nowPlaying.showUpNext)
             Toggle(isOn: $store.settings.nowPlaying.lyricsEnabled) {
                 VStack(alignment: .leading, spacing: 2) {

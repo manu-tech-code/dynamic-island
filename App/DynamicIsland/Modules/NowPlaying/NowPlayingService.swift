@@ -49,6 +49,15 @@ final class NowPlayingService: ActivityProvider {
                          relevance: info.isPlaying ? 1 : 0.3, startedAt: sessionStart)]
     }
 
+    #if DEBUG
+    /// Swaps in a sample track for offline renders; pass the result back to restore.
+    func debugSwapInfo(_ new: NowPlayingInfo?) -> NowPlayingInfo? {
+        let old = info
+        info = new
+        return old
+    }
+    #endif
+
     // MARK: lifecycle
 
     func start() {
