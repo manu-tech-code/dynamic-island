@@ -75,17 +75,19 @@ public enum IslandMetrics {
 
     // MARK: compact
 
-    /// Widest of the leading/trailing content for the primary activity.
-    public static func primaryEarContent(_ payload: ActivityPayload) -> CGFloat {
+    /// Width of the primary activity's own content in the leading and the
+    /// trailing ear. Background apps have none: their icons are balanced
+    /// across both ears.
+    public static func primaryEarWidths(_ payload: ActivityPayload) -> (leading: CGFloat, trailing: CGFloat) {
         switch payload {
-        case .nowPlaying: return 24
-        case .timer(let t): return t.duration >= 3600 ? 56 : 40
-        case .calendar: return 34
-        case .battery: return 30
-        case .backgroundApps(let apps): return iconRowWidth(count: Int((Double(apps.count) / 2).rounded(.up)))
-        case .shelf: return 34
-        case .download: return 38
-        case .privacy: return 22
+        case .nowPlaying: (glyph, glyph)                               // artwork | waveform
+        case .timer(let t): (glyph, t.duration >= 3600 ? 56 : 40)      // ring | countdown
+        case .calendar: (glyph, 34)                                    // icon | "in 5m"
+        case .battery: (24, 30)                                        // icon | "15%"
+        case .backgroundApps: (0, 0)
+        case .shelf: (glyph, glyph)                                    // tray | count
+        case .download: (glyph, 38)                                    // ring | "100%"
+        case .privacy(let p): (p.microphone && p.camera ? 36 : glyph, 18)
         }
     }
 
@@ -94,56 +96,89 @@ public enum IslandMetrics {
         return CGFloat(count) * glyph + CGFloat(count - 1) * glyphSpacing
     }
 
-    /// Extra trailing width for secondary activities and the overflow chip.
-    public static func secondaryWidth(secondaries: Int, overflow: Int) -> CGFloat {
-        var w: CGFloat = 0
-        if secondaries > 0 { w += 8 + iconRowWidth(count: secondaries) }
-        if overflow > 0 { w += glyphSpacing + overflowChipWidth(overflow) }
-        return w
+    /// Width of the secondary activities' glyphs in the band below the notch.
+    public static func secondaryWidth(count: Int) -> CGFloat {
+        count > 0 ? 8 + iconRowWidth(count: count) : 0
     }
 
-    /// Room for the dashboard button at the outer end of the trailing ear.
-    public static let dashboardButton: CGFloat = 22 + glyphSpacing
+    /// The dashboard button at the outer end of the trailing ear.
+    public static let dashboardButtonSize: CGFloat = 22
 
+    /// What each ear of the compact island holds beside the notch. The island
+    /// stays centred on the notch, so both ears are as wide as the fuller one;
+    /// the items that can go on either side (more app icons, other activities)
+    /// go to whichever side is shorter, so as little room as possible is empty.
+    public struct CompactEars: Equatable, Sendable {
+        /// Background app icons in each ear, in order (primary background apps only).
+        public var leadingApps = 0
+        public var trailingApps = 0
+        /// Ids of the secondary activities in each ear.
+        public var leadingSecondaries: [String] = []
+        public var trailingSecondaries: [String] = []
+        /// Content width of each ear, before padding.
+        public var leading: CGFloat = 0
+        public var trailing: CGFloat = 0
+        public var content: CGFloat { max(leading, trailing) }
+        public init() {}
+    }
+
+    public static func compactEars(primary: Activity, secondaries: some Collection<Activity>, iconLimit: Int, dashboardButton: Bool) -> CompactEars {
+        var e = CompactEars()
+        func add(_ width: CGFloat, leading: Bool) {
+            if leading { e.leading += (e.leading > 0 ? glyphSpacing : 0) + width }
+            else { e.trailing += (e.trailing > 0 ? glyphSpacing : 0) + width }
+        }
+        let own = primaryEarWidths(primary.payload)
+        if own.leading > 0 { add(own.leading, leading: true) }
+        if own.trailing > 0 { add(own.trailing, leading: false) }
+        if dashboardButton { add(dashboardButtonSize, leading: false) }
+        if case .backgroundApps(let apps) = primary.payload {
+            for _ in 0..<min(apps.count, max(1, iconLimit)) {
+                let left = e.leading <= e.trailing
+                add(glyph, leading: left)
+                if left { e.leadingApps += 1 } else { e.trailingApps += 1 }
+            }
+        }
+        for a in secondaries {
+            let left = e.leading <= e.trailing
+            add(glyph, leading: left)
+            if left { e.leadingSecondaries.append(a.id) } else { e.trailingSecondaries.append(a.id) }
+        }
+        return e
+    }
+
+    /// The compact island fits what's on it: nothing is reserved for items that
+    /// aren't shown, and activities past the limit simply aren't on it (they
+    /// stay in the dashboard).
     public static func compactSize(notch: CGSize, style: CompactStyle, ranked: RankedActivities, backgroundIconLimit: Int,
                                    dashboardButton showButton: Bool = false) -> CGSize {
         guard let primary = ranked.primary else { return idleSize(notch: notch) }
-        let button = showButton ? dashboardButton : 0
-        let secondaries = ranked.secondaries.count
-        let overflow = ranked.overflow.count
         switch style {
         case .beside:
-            var leading = primaryEarContent(primary.payload)
-            var trailing = leading
-            if case .backgroundApps(let apps) = primary.payload {
-                let shown = min(apps.count, max(1, backgroundIconLimit))
-                let hidden = apps.count - shown
-                let left = Int((Double(shown) / 2).rounded(.up))
-                leading = iconRowWidth(count: left)
-                trailing = iconRowWidth(count: shown - left) + (hidden > 0 ? glyphSpacing + overflowChipWidth(hidden) : 0)
-            }
-            trailing += secondaryWidth(secondaries: secondaries, overflow: overflow) + button
-            let ear = earOuterPadding + max(leading, trailing) + earInnerGap
+            let ears = compactEars(primary: primary, secondaries: ranked.secondaries, iconLimit: backgroundIconLimit,
+                                   dashboardButton: showButton)
+            let ear = earOuterPadding + ears.content + earInnerGap
             return CGSize(width: notch.width + 2 * ear, height: notch.height)
         case .below:
             var content: CGFloat = 0
             if case .backgroundApps(let apps) = primary.payload {
-                let shown = min(apps.count, max(1, backgroundIconLimit))
-                let hidden = apps.count - shown
-                content = iconRowWidth(count: shown) + (hidden > 0 ? glyphSpacing + overflowChipWidth(hidden) : 0)
+                content = iconRowWidth(count: min(apps.count, max(1, backgroundIconLimit)))
             }
-            content += secondaryWidth(secondaries: secondaries, overflow: overflow)
+            content += secondaryWidth(count: ranked.secondaries.count)
+            let button = showButton ? dashboardButtonSize + 8 : 0
             let width = max(notch.width + 24, 2 * earOuterPadding + content + (content > 0 ? 60 : 0)) + button
             return CGSize(width: width, height: notch.height + belowBand)
         }
     }
 
     /// The compact island after applying the user's width limit: background
-    /// app icons, then extra activities, fold into "+N" until it fits.
+    /// app icons, then extra activities, leave it until it fits.
     public struct CompactFit: Equatable, Sendable {
         public var ranked: RankedActivities
         public var iconLimit: Int
         public var size: CGSize
+        /// What each ear shows (beside the notch).
+        public var ears: CompactEars
     }
 
     public static func fitCompact(notch: CGSize, style: CompactStyle, ranked: RankedActivities, iconLimit: Int,
@@ -153,8 +188,12 @@ public enum IslandMetrics {
         func measure() -> CGSize {
             compactSize(notch: notch, style: style, ranked: r, backgroundIconLimit: limit, dashboardButton: dashboardButton)
         }
+        func result(_ size: CGSize) -> CompactFit {
+            let ears = r.primary.map { compactEars(primary: $0, secondaries: r.secondaries, iconLimit: limit, dashboardButton: dashboardButton) }
+            return CompactFit(ranked: r, iconLimit: limit, size: size, ears: ears ?? CompactEars())
+        }
         var size = measure()
-        guard let maxWidth, maxWidth > 0 else { return CompactFit(ranked: r, iconLimit: limit, size: size) }
+        guard let maxWidth, maxWidth > 0 else { return result(size) }
         while size.width > maxWidth {
             if case .backgroundApps(let apps)? = r.primary?.payload, limit > 1, min(apps.count, limit) > 1 {
                 limit = min(apps.count, limit) - 1
@@ -165,40 +204,7 @@ public enum IslandMetrics {
             }
             size = measure()
         }
-        return CompactFit(ranked: r, iconLimit: limit, size: size)
-    }
-
-    /// The compact island at the user's width. The ears scale around the
-    /// notch; narrower folds icons and extra activities into "+N" (content is
-    /// never clipped), wider just gives the ears more room.
-    public static func fitCompact(notch: CGSize, style: CompactStyle, ranked: RankedActivities, iconLimit: Int,
-                                  dashboardButton: Bool, maxWidth: CGFloat?, scale: Double) -> CompactFit {
-        let natural = fitCompact(notch: notch, style: style, ranked: ranked, iconLimit: iconLimit,
-                                 dashboardButton: dashboardButton, maxWidth: maxWidth)
-        guard scale != 1, ranked.primary != nil else { return natural }
-        let target = scaledCompactWidth(natural: natural.size.width, notch: notch, style: style, scale: scale)
-        let cap = maxWidth.map { min($0, target) } ?? target
-        if scale < 1 {
-            var fit = fitCompact(notch: notch, style: style, ranked: ranked, iconLimit: iconLimit,
-                                 dashboardButton: dashboardButton, maxWidth: cap)
-            fit.size.width = max(fit.size.width, cap)
-            return fit
-        }
-        var fit = natural
-        fit.size.width = max(natural.size.width, cap)
-        return fit
-    }
-
-    /// Scales the ears (beside) or the band (below); the notch itself never changes.
-    public static func scaledCompactWidth(natural: CGFloat, notch: CGSize, style: CompactStyle, scale: Double) -> CGFloat {
-        switch style {
-        case .beside:
-            let minEar = earOuterPadding + glyph + earInnerGap
-            let ear = max(0, (natural - notch.width) / 2)
-            return notch.width + 2 * max(minEar, (ear * CGFloat(scale)).rounded())
-        case .below:
-            return max(notch.width + 24, (natural * CGFloat(scale)).rounded())
-        }
+        return result(size)
     }
 
     /// Background apps, expanded: as many columns as fit the width, as many
@@ -250,12 +256,11 @@ public enum IslandMetrics {
     public static let shelf = CGSize(width: 600, height: 216)
 
     public static func alertSize(for style: IslandAlert.Style, notch: CGSize = CGSize(width: 185, height: 32),
-                                 compactStyle: CompactStyle = .beside, scale: Double = 1) -> CGSize {
+                                 compactStyle: CompactStyle = .beside) -> CGSize {
         switch style {
         case .volume, .brightness:
-            // The HUD lives where compact content does, at the compact width.
-            let natural = compactStyle == .beside ? notch.width + 2 * 116 : max(notch.width + 24, 280)
-            let width = scaledCompactWidth(natural: natural, notch: notch, style: compactStyle, scale: scale)
+            // The HUD lives where compact content does.
+            let width = compactStyle == .beside ? notch.width + 2 * 116 : max(notch.width + 24, 280)
             return CGSize(width: width, height: compactStyle == .beside ? notch.height : notch.height + belowBand)
         case .eventStarting, .deviceConnected: return CGSize(width: 460, height: 100)
         case .downloadFinished: return CGSize(width: 460, height: 88)
@@ -290,12 +295,12 @@ public enum IslandMetrics {
     /// Below the notch, the band's title gets whatever its icons leave. While the
     /// title peeks, the band widens until the title fits: by at most `maxExtra`
     /// (past that it scrolls), never past `maxWidth`, and never narrower.
-    public static func belowPeekWidth(band: CGFloat, titleWidth: CGFloat, secondaries: Int, overflow: Int,
+    public static func belowPeekWidth(band: CGFloat, titleWidth: CGFloat, secondaries: Int,
                                       dashboardButton: Bool, maxWidth: CGFloat?, maxExtra: CGFloat = 160) -> CGFloat {
         // Padding, artwork, the spacer and the waveform, with the band's 8 pt spacing.
         let chrome: CGFloat = 2 * 14 + 18 + 8 + 8 + 4 + 8 + 18
-        let glyphs = secondaryWidth(secondaries: secondaries, overflow: overflow)
-        let used = chrome + (glyphs > 0 ? 8 + glyphs : 0) + (dashboardButton ? 8 + 22 : 0)
+        let glyphs = secondaryWidth(count: secondaries)
+        let used = chrome + (glyphs > 0 ? 8 + glyphs : 0) + (dashboardButton ? 8 + dashboardButtonSize : 0)
         var width = min(max(band, used + titleWidth.rounded(.up) + 2), band + maxExtra)
         if let maxWidth, maxWidth > 0 { width = min(width, max(band, maxWidth)) }
         return width
@@ -325,14 +330,15 @@ public enum IslandMetrics {
         switch presentation {
         case .idle: return idleSize(notch: c.notch)
         case .compact:
+            // Fits its content; the width setting is for open states.
             return fitCompact(notch: c.notch, style: c.style, ranked: ranked, iconLimit: c.iconLimit,
-                              dashboardButton: c.dashboardButton, maxWidth: c.compactMaxWidth, scale: c.widthScale).size
+                              dashboardButton: c.dashboardButton, maxWidth: c.compactMaxWidth).size
         case .expanded:
             guard let kind = expandedKind else { return dashboardSize(c) }
             return expandedSize(for: kind, widthScale: c.widthScale)
         case .dashboard: return dashboardSize(c)
         case .shelf: return scaled(shelf, c.widthScale)
-        case .alert(let alert): return alertSize(for: alert.style, notch: c.notch, compactStyle: c.style, scale: c.widthScale)
+        case .alert(let alert): return alertSize(for: alert.style, notch: c.notch, compactStyle: c.style)
         }
     }
 

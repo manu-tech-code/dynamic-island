@@ -97,40 +97,22 @@ final class IslandViewModel {
         max(1, DashboardLayout.rows(settings.visibleDashboard, columns: dashboardColumns).count)
     }
 
-    /// The dashboard button's room at the end of the compact island's right
-    /// ear. Kept whenever the button can appear, so hovering never resizes the island.
-    var reservesDashboardButton: Bool {
-        presentation == .compact && settings.dashboardButton != .off
-    }
-
-    /// The dashboard button is visible (it fades in on hover in its reserved room).
+    /// The dashboard button at the end of the compact island's right ear.
     var showsDashboardButton: Bool {
-        guard reservesDashboardButton else { return false }
-        switch settings.dashboardButton {
-        case .always: return true
-        case .onHover: return hover && !isPreview
-        case .off: return false
-        }
+        presentation == .compact && settings.dashboardButton == .always
     }
 
     private var layoutContext: IslandMetrics.Context {
         IslandMetrics.Context(notch: notch.rect.size, style: settings.compactStyle, iconLimit: settings.backgroundApps.maxIcons,
-                              dashboardButton: reservesDashboardButton, widthScale: widthScale, dashboardRows: dashboardRows,
+                              dashboardButton: showsDashboardButton, widthScale: widthScale, dashboardRows: dashboardRows,
                               compactMaxWidth: settings.compactMaxWidth > 0 ? settings.compactMaxWidth : nil)
     }
 
-    /// What the compact island actually shows at the user's width and limit.
+    /// What the compact island shows, and where: it fits its content, within the user's width limit.
     var compactFit: IslandMetrics.CompactFit {
         let c = layoutContext
         return IslandMetrics.fitCompact(notch: c.notch, style: c.style, ranked: ranked, iconLimit: c.iconLimit,
-                                        dashboardButton: c.dashboardButton, maxWidth: c.compactMaxWidth, scale: c.widthScale)
-    }
-
-    /// The compact island at the standard width, used to turn a drag into a scale.
-    private var naturalCompactWidth: CGFloat {
-        let c = layoutContext
-        return IslandMetrics.fitCompact(notch: c.notch, style: c.style, ranked: ranked, iconLimit: c.iconLimit,
-                                        dashboardButton: c.dashboardButton, maxWidth: c.compactMaxWidth).size.width
+                                        dashboardButton: c.dashboardButton, maxWidth: c.compactMaxWidth)
     }
 
     /// The track playing on the compact island, while it shows its title under the ears.
@@ -168,7 +150,7 @@ final class IslandViewModel {
                 let fit = compactFit.ranked
                 let title = (track.title as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold)]).width
                 size.width = IslandMetrics.belowPeekWidth(band: size.width, titleWidth: title, secondaries: fit.secondaries.count,
-                                                          overflow: fit.overflow.count, dashboardButton: reservesDashboardButton,
+                                                          dashboardButton: showsDashboardButton,
                                                           maxWidth: settings.compactMaxWidth > 0 ? settings.compactMaxWidth : nil)
             }
             size.height += peekHeight
@@ -205,14 +187,11 @@ final class IslandViewModel {
     var isNarrow: Bool { bodySize.width < 470 }
 
     /// How many points of width one unit of scale is worth in the current
-    /// state, for turning a drag into a scale. nil where resizing doesn't apply.
+    /// state, for turning a drag into a scale. nil where resizing doesn't apply:
+    /// the compact island fits its content, so only open states resize.
     var resizeBase: CGFloat? {
         switch presentation {
-        case .compact:
-            // The ears scale around the notch (beside) or the band scales (below).
-            let natural = naturalCompactWidth
-            return settings.compactStyle == .beside ? max(40, natural - notch.rect.width) : natural
-        case .idle, .alert: return nil
+        case .idle, .compact, .alert: return nil
         default: return baseOpenWidth
         }
     }
@@ -284,7 +263,6 @@ final class IslandViewModel {
 
     func setHover(_ inside: Bool) {
         guard hover != inside else { return }
-        // Only fades the dashboard button in its room; the size stays.
         withAnimation(reduceMotion ? nil : IslandMotion.hover) { hover = inside }
         if inside, !isOpen, !reduceMotion { bounce += 1 }
     }

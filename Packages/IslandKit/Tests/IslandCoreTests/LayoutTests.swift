@@ -33,9 +33,9 @@ import Testing
     }
 
     @Test func compactBesideMatchesDesign() {
-        // Design: Now Playing ears are 54 pt each side, 32 pt tall.
+        // Artwork | notch | waveform: ears of 16 + 20 + 14 pt, 32 pt tall.
         let s = IslandMetrics.compactSize(notch: notch, style: .beside, ranked: ranked([music]), backgroundIconLimit: 4)
-        #expect(s == CGSize(width: 185 + 2 * 54, height: 32))
+        #expect(s == CGSize(width: 185 + 2 * 50, height: 32))
     }
 
     @Test func compactBelowKeepsMenuBarClear() {
@@ -44,12 +44,12 @@ import Testing
         #expect(s.height == CGFloat(32) + IslandMetrics.belowBand)
     }
 
-    @Test func secondariesAndOverflowWidenTheEars() {
+    @Test func secondariesWidenTheEarsButOverflowDoesNot() {
         let one = IslandMetrics.compactSize(notch: notch, style: .beside, ranked: ranked([music]), backgroundIconLimit: 4)
         let two = IslandMetrics.compactSize(notch: notch, style: .beside, ranked: ranked([music, music]), backgroundIconLimit: 4)
         let more = IslandMetrics.compactSize(notch: notch, style: .beside, ranked: ranked([music, music], overflow: 3), backgroundIconLimit: 4)
         #expect(two.width > one.width)
-        #expect(more.width > two.width)
+        #expect(more.width == two.width) // activities past the limit aren't on the island
     }
 
     @Test func backgroundAppsRespectIconLimit() {

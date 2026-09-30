@@ -42,17 +42,30 @@ struct CompactView: View {
         }
     }
 
+    /// Each ear holds what `CompactEars` gave it: the primary's own content on
+    /// its side, then the app icons and other activities balanced across both.
     private func ears(primary: Activity, ranked: RankedActivities, inner: CGFloat, notchW: CGFloat) -> some View {
-        HStack(spacing: 0) {
-            CompactLeading(activity: primary, model: model)
-                .frame(width: inner, alignment: .leading)
-                .padding(.leading, IslandMetrics.earOuterPadding)
-                .padding(.trailing, IslandMetrics.earInnerGap)
+        let ears = model.compactFit.ears
+        let apps: [RunningAppInfo] = if case .backgroundApps(let a) = primary.payload { a } else { [] }
+        let leadingApps = Array(apps.prefix(ears.leadingApps))
+        let trailingApps = Array(apps.dropFirst(ears.leadingApps).prefix(ears.trailingApps))
+        let leadingOthers = ranked.secondaries.filter { ears.leadingSecondaries.contains($0.id) }
+        let trailingOthers = ranked.secondaries.filter { ears.trailingSecondaries.contains($0.id) }
+        return HStack(spacing: 0) {
+            HStack(spacing: IslandMetrics.glyphSpacing) {
+                if primary.kind != .backgroundApps { CompactLeading(activity: primary, model: model) }
+                if !leadingApps.isEmpty { AppIconRow(apps: leadingApps) }
+                if !leadingOthers.isEmpty { SecondaryGlyphs(activities: leadingOthers, model: model) }
+            }
+            .frame(width: inner, alignment: .leading)
+            .padding(.leading, IslandMetrics.earOuterPadding)
+            .padding(.trailing, IslandMetrics.earInnerGap)
             Color.clear.frame(width: notchW)
             HStack(spacing: IslandMetrics.glyphSpacing) {
-                CompactTrailing(activity: primary, model: model)
-                SecondaryGlyphs(ranked: ranked, model: model)
-                ReservedDashboardButton(model: model)
+                if primary.kind != .backgroundApps { CompactTrailing(activity: primary, model: model) }
+                if !trailingApps.isEmpty { AppIconRow(apps: trailingApps) }
+                if !trailingOthers.isEmpty { SecondaryGlyphs(activities: trailingOthers, model: model) }
+                if model.showsDashboardButton { DashboardButton(model: model) }
             }
             .frame(width: inner, alignment: .trailing)
             .padding(.leading, IslandMetrics.earInnerGap)
@@ -69,8 +82,8 @@ struct CompactView: View {
             Color.clear.frame(height: model.notch.rect.height)
             HStack(spacing: 8) {
                 BelowBand(activity: primary, model: model)
-                SecondaryGlyphs(ranked: ranked, model: model)
-                ReservedDashboardButton(model: model)
+                if !ranked.secondaries.isEmpty { SecondaryGlyphs(activities: Array(ranked.secondaries), model: model) }
+                if model.showsDashboardButton { DashboardButton(model: model) }
             }
             .padding(.horizontal, 14)
             .frame(height: IslandMetrics.belowBand - 2)
@@ -112,8 +125,8 @@ private struct CompactLeading: View {
             Image(systemName: "calendar").foregroundStyle(Color(hex: e.calendarColorHex))
         case .battery:
             Image(systemName: "battery.25percent").foregroundStyle(.red)
-        case .backgroundApps(let apps):
-            AppIconRow(apps: AppSplit(apps: apps, limit: model.compactFit.iconLimit).leading)
+        case .backgroundApps:
+            EmptyView() // its icons are placed by the ears
         case .shelf, .download, .privacy:
             Phase2Leading(payload: activity.payload)
         }
@@ -142,12 +155,8 @@ private struct CompactTrailing: View {
             }
         case .battery(let b):
             Text("\(b.percent)%").monospacedDigit().foregroundStyle(.red)
-        case .backgroundApps(let apps):
-            let split = AppSplit(apps: apps, limit: model.compactFit.iconLimit)
-            HStack(spacing: IslandMetrics.glyphSpacing) {
-                AppIconRow(apps: split.trailing)
-                if split.hidden > 0 { OverflowChip(count: split.hidden) }
-            }
+        case .backgroundApps:
+            EmptyView() // its icons are placed by the ears
         case .shelf, .download, .privacy:
             Phase2Trailing(payload: activity.payload)
         }
@@ -196,10 +205,8 @@ private struct BelowBand: View {
             Spacer(minLength: 4)
             Text("\(b.percent)%").monospacedDigit().foregroundStyle(.red)
         case .backgroundApps(let apps):
-            let split = AppSplit(apps: apps, limit: model.compactFit.iconLimit)
             Spacer(minLength: 0)
-            AppIconRow(apps: split.leading + split.trailing)
-            if split.hidden > 0 { OverflowChip(count: split.hidden) }
+            AppIconRow(apps: Array(apps.prefix(model.compactFit.iconLimit)))
             Spacer(minLength: 0)
         case .shelf, .download, .privacy:
             Phase2Band(payload: activity.payload)
@@ -209,37 +216,30 @@ private struct BelowBand: View {
 
 // MARK: shared pieces
 
-/// Background apps split into the two ears; the rest are counted in a chip.
-struct AppSplit {
-    let leading: [RunningAppInfo]
-    let trailing: [RunningAppInfo]
-    let hidden: Int
-
-    init(apps: [RunningAppInfo], limit: Int) {
-        let shown = Array(apps.prefix(max(1, limit)))
-        let left = Int((Double(shown.count) / 2).rounded(.up))
-        leading = Array(shown.prefix(left))
-        trailing = Array(shown.dropFirst(left))
-        hidden = apps.count - shown.count
-    }
-}
-
+/// App icons in a row. Each switches to its app, unless the row is part of a
+/// bigger button (`activates: false`).
 struct AppIconRow: View {
     let apps: [RunningAppInfo]
     var size: CGFloat = IslandMetrics.glyph
+    var activates = true
     @Environment(AppEnvironment.self) private var env
 
     var body: some View {
         HStack(spacing: IslandMetrics.glyphSpacing) {
             ForEach(apps) { app in
-                Button { env.backgroundApps.activate(app) } label: { AppIcon(app: app, size: size) }
-                    .buttonStyle(.plain)
-                    .help(app.name)
+                if activates {
+                    Button { env.backgroundApps.activate(app) } label: { AppIcon(app: app, size: size) }
+                        .buttonStyle(.plain)
+                        .help(app.name)
+                } else {
+                    AppIcon(app: app, size: size)
+                }
             }
         }
     }
 }
 
+/// "+N" for what didn't fit, in the dashboard (the compact island never shows one).
 struct OverflowChip: View {
     let count: Int
     var body: some View {
@@ -258,21 +258,17 @@ struct OverflowChip: View {
 
 /// Minimal glyphs for the activities after the primary one; click to open one.
 private struct SecondaryGlyphs: View {
-    let ranked: RankedActivities
+    let activities: [Activity]
     let model: IslandViewModel
     @Environment(AppEnvironment.self) private var env
 
     var body: some View {
-        if !ranked.secondaries.isEmpty || !ranked.overflow.isEmpty {
-            HStack(spacing: IslandMetrics.glyphSpacing) {
-                ForEach(Array(ranked.secondaries)) { a in
-                    Button { model.open(a.id) } label: { glyph(a) }
-                        .buttonStyle(.plain)
-                        .help(tooltip(a))
-                }
-                if !ranked.overflow.isEmpty { OverflowChip(count: ranked.overflow.count) }
+        HStack(spacing: IslandMetrics.glyphSpacing) {
+            ForEach(activities) { a in
+                Button { model.open(a.id) } label: { glyph(a) }
+                    .buttonStyle(.plain)
+                    .help(tooltip(a))
             }
-            .padding(.leading, 2)
         }
     }
 
@@ -280,6 +276,7 @@ private struct SecondaryGlyphs: View {
         if case .nowPlaying(let i) = a.payload, !i.title.isEmpty {
             return i.artist.isEmpty ? i.title : "\(i.title) — \(i.artist)"
         }
+        if case .backgroundApps(let apps) = a.payload { return "Open apps · \(apps.count)" }
         return a.kind.displayName
     }
 
@@ -296,8 +293,13 @@ private struct SecondaryGlyphs: View {
             Image(systemName: "calendar").foregroundStyle(Color(hex: e.calendarColorHex)).frame(width: 20, height: 20)
         case .battery:
             Image(systemName: "battery.25percent").foregroundStyle(.red).frame(width: 20, height: 20)
-        case .backgroundApps:
-            Image(systemName: "square.grid.2x2.fill").frame(width: 20, height: 20)
+        case .backgroundApps(let apps):
+            // The first app's own icon: a grid glyph would look like the dashboard button.
+            if let first = apps.first {
+                AppIcon(app: first, size: 20)
+            } else {
+                Image(systemName: "app.dashed").frame(width: 20, height: 20)
+            }
         case .shelf, .download, .privacy:
             Phase2Glyph(payload: a.payload)
         }
@@ -340,23 +342,6 @@ extension AnyTransition {
             insertion: .opacity.combined(with: .offset(y: -8)),
             removal: .opacity.animation(IslandMotion.peekRowOut)
         )
-    }
-}
-
-/// The dashboard button in the room the compact island keeps for it: it fades
-/// in on hover instead of pushing the island wider.
-private struct ReservedDashboardButton: View {
-    let model: IslandViewModel
-
-    var body: some View {
-        if model.reservesDashboardButton {
-            let shown = model.showsDashboardButton
-            DashboardButton(model: model)
-                .opacity(shown ? 1 : 0)
-                .scaleEffect(shown ? 1 : 0.6)
-                .allowsHitTesting(shown)
-                .accessibilityHidden(!shown)
-        }
     }
 }
 
