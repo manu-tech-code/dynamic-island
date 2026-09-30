@@ -122,10 +122,12 @@ struct IslandIconButton: View {
 }
 
 /// Capsule button for island content ("Join", presets). Not glass: no glass on glass.
+/// `fillWidth` stretches it to its grid cell so rows of buttons line up.
 struct IslandCapsuleButton: View {
     let title: String
     var systemName: String?
     var prominent = false
+    var fillWidth = false
     let action: () -> Void
     @State private var hovering = false
 
@@ -133,10 +135,11 @@ struct IslandCapsuleButton: View {
         Button(action: action) {
             HStack(spacing: 5) {
                 if let systemName { Image(systemName: systemName) }
-                Text(title)
+                Text(title).lineLimit(1).minimumScaleFactor(0.8)
             }
             .font(.system(size: 12, weight: .semibold))
-            .padding(.horizontal, 12)
+            .padding(.horizontal, fillWidth ? 6 : 12)
+            .frame(maxWidth: fillWidth ? .infinity : nil)
             .frame(height: 26)
             .foregroundStyle(prominent ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
             .background(Capsule().fill(prominent ? AnyShapeStyle(Color.accentColor.opacity(hovering ? 0.85 : 1))

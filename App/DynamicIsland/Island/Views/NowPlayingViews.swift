@@ -435,6 +435,8 @@ enum ClosureMenuItem {
     }
 }
 
+/// Volume row for the output menu. Auto Layout pins the slider between the
+/// two speaker icons and gives it a real width; the view stretches with the menu.
 final class VolumeSliderView: NSView {
     private let onChange: (Float) -> Void
     private let slider: NSSlider
@@ -442,19 +444,31 @@ final class VolumeSliderView: NSView {
     init(value: Float, onChange: @escaping (Float) -> Void) {
         self.onChange = onChange
         slider = NSSlider(value: Double(value), minValue: 0, maxValue: 1, target: nil, action: nil)
-        super.init(frame: NSRect(x: 0, y: 0, width: 250, height: 30))
+        super.init(frame: NSRect(x: 0, y: 0, width: 280, height: 34))
+        autoresizingMask = [.width]
         let low = NSImageView(image: NSImage(systemSymbolName: "speaker.fill", accessibilityDescription: "Quiet")!)
         let high = NSImageView(image: NSImage(systemSymbolName: "speaker.wave.3.fill", accessibilityDescription: "Loud")!)
         [low, high].forEach { $0.contentTintColor = .secondaryLabelColor }
         slider.target = self
         slider.action = #selector(changed)
         slider.isContinuous = true
+        slider.controlSize = .regular
         slider.setAccessibilityLabel("Volume")
-        let stack = NSStackView(views: [low, slider, high])
-        stack.spacing = 8
-        stack.frame = bounds.insetBy(dx: 14, dy: 4)
-        stack.autoresizingMask = [.width, .height]
-        addSubview(stack)
+        for v in [low, slider, high] as [NSView] {
+            v.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(v)
+        }
+        slider.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        NSLayoutConstraint.activate([
+            low.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
+            low.centerYAnchor.constraint(equalTo: centerYAnchor),
+            slider.leadingAnchor.constraint(equalTo: low.trailingAnchor, constant: 10),
+            slider.centerYAnchor.constraint(equalTo: centerYAnchor),
+            slider.widthAnchor.constraint(greaterThanOrEqualToConstant: 180),
+            high.leadingAnchor.constraint(equalTo: slider.trailingAnchor, constant: 10),
+            high.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
+            high.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }

@@ -216,9 +216,13 @@ private struct TimerWidget: View {
         } else {
             let presets = Array(env.settings.settings.timers.presetMinutes.prefix(6))
             Spacer(minLength: 0)
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
+            // Full-width cells in a leading-aligned grid, so an odd last preset
+            // lines up under the left column instead of floating.
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], alignment: .leading, spacing: 6) {
                 ForEach(presets, id: \.self) { m in
-                    IslandCapsuleButton(title: m >= 60 && m % 60 == 0 ? "\(m / 60) h" : "\(m) min") { timers.start(minutes: Double(m)) }
+                    IslandCapsuleButton(title: m >= 60 && m % 60 == 0 ? "\(m / 60) h" : "\(m) min", fillWidth: true) {
+                        timers.start(minutes: Double(m))
+                    }
                 }
             }
         }

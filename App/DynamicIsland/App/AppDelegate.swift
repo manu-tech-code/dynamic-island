@@ -1,5 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
+import IslandCore
+import SwiftUI
 
 @main
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -71,6 +73,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             env.audioOutput.refresh()
             Log.info("outputs: \(env.audioOutput.devices.map { "\($0.name)\($0.id == env.audioOutput.defaultID ? "*" : "")" }) volume \(env.audioOutput.volume.map { String(format: "%.2f", $0) } ?? "n/a")")
             Task { Log.info("music airplay: \(await MusicScripting.airPlayDevices().map { "\($0.name)\($0.selected ? "*" : "")" })") }
+        case "debug-snapshot":
+            // Renders our own windows to PNGs in the log folder (no screen capture involved).
+            for (i, w) in NSApp.windows.enumerated() where w.isVisible {
+                guard let view = w.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { continue }
+                view.cacheDisplay(in: view.bounds, to: rep)
+                let url = Log.fileURL.deletingLastPathComponent().appendingPathComponent("window-\(i)-\(w.title.isEmpty ? "panel" : "settings").png")
+                try? rep.representation(using: .png, properties: [:])?.write(to: url)
+                Log.info("snapshot \(url.lastPathComponent) \(Int(view.bounds.width))×\(Int(view.bounds.height))")
+            }
+        case "debug-render":
+            // Offline SwiftUI render of the preview canvas (glass doesn't render; layout does).
+            let model = IslandViewModel(env: env, notch: NotchRect(rect: CGRect(x: 0, y: 0, width: 185, height: 32), isHardware: false))
+            for (name, p) in [("compact", IslandPresentation.compact), ("expanded", .expanded(activityID: "")), ("dashboard", .dashboard)] {
+                model.forced = p
+                let renderer = ImageRenderer(content: PreviewCanvas(model: model, availableWidth: 680).environment(env))
+                renderer.scale = 1
+                if let img = renderer.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+                    let url = Log.fileURL.deletingLastPathComponent().appendingPathComponent("render-\(name).png")
+                    try? rep.representation(using: .png, properties: [:])?.write(to: url)
+                    Log.info("render \(name) \(Int(img.size.width))×\(Int(img.size.height)) outer \(model.outerSize)")
+                }
+            }
         case "debug-music":
             let probes = ["player state", "class of current track", "index of current track", "name of container of current track",
                           "class of container of current track", "count of tracks of container of current track",

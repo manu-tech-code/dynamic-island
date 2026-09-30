@@ -22,6 +22,7 @@ struct IslandPreview: View {
     var states: [PreviewState] = PreviewState.allCases
     @Environment(AppEnvironment.self) private var env
     @State private var model: IslandViewModel?
+    @State private var availableWidth: CGFloat = 680
     @State private var sampleAlert = IslandAlert(kind: .battery, style: .chargerConnected(percent: 80), holdSeconds: 0)
 
     var body: some View {
@@ -70,23 +71,42 @@ struct IslandPreview: View {
     }
 
     private func canvas(_ model: IslandViewModel) -> some View {
-        let island = model.outerSize
-        let canvasWidth: CGFloat = 760
-        let canvasHeight = island.height + 56
-        return GeometryReader { geo in
-            let scale = min(1, geo.size.width / canvasWidth)
-            ZStack(alignment: .top) {
-                Wallpaper()
-                IslandRootView(model: model)
-                    .frame(width: canvasWidth, height: canvasHeight)
+        PreviewCanvas(model: model, availableWidth: availableWidth)
+            .frame(maxWidth: .infinity)
+            .background {
+                GeometryReader { geo in
+                    Color.clear.onAppear { availableWidth = geo.size.width }
+                        .onChange(of: geo.size.width) { _, w in availableWidth = w }
+                }
             }
-            .frame(width: canvasWidth, height: canvasHeight)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .scaleEffect(scale, anchor: .top)
-            .frame(width: geo.size.width, height: canvasHeight * scale, alignment: .top)
+    }
+}
+
+/// Draws the island at full size, then scales it from the top-left corner
+/// and gives the result exactly the scaled size, so layout and drawing agree
+/// (scaleEffect alone leaves the original size in layout and hit testing).
+struct PreviewCanvas: View {
+    let model: IslandViewModel
+    let availableWidth: CGFloat
+    static let width: CGFloat = 760
+
+    var body: some View {
+        let canvasHeight = model.outerSize.height + 56
+        let scale = min(1, max(0.3, availableWidth / Self.width))
+        ZStack(alignment: .top) {
+            Wallpaper()
+                .frame(width: Self.width, height: canvasHeight)
+            IslandRootView(model: model)
+                .frame(width: Self.width, height: canvasHeight, alignment: .top)
         }
-        .aspectRatio(canvasWidth / canvasHeight, contentMode: .fit)
-        .frame(maxWidth: canvasWidth)
+        .frame(width: Self.width, height: canvasHeight, alignment: .top)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .scaleEffect(scale, anchor: .topLeading)
+        .frame(width: Self.width * scale, height: canvasHeight * scale, alignment: .topLeading)
+        .clipped()
+        // A picture, not a control: clicks go to the picker and the form.
+        .allowsHitTesting(false)
+        .accessibilityElement()
         .accessibilityLabel("Island preview")
     }
 }
