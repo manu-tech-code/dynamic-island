@@ -12,13 +12,15 @@ feat/… fix/… bug/… chore/…  ──PR──▶  develop  ──PR──�
 2. **Open a pull request into `develop`.** It needs the *Branch rules* and *Core tests*
    checks to pass. Squash or merge it.
 3. **Release**: bump `CFBundleShortVersionString` (and `CFBundleVersion` by one) in
-   `project.yml` with a `chore/` PR into `develop`, then open a PR from `develop` into
+   `project.yml`, run `xcodegen generate` so `Info.plist` follows, and commit both in
+   a `chore/` PR into `develop`. Then open a PR from `develop` into
    `main` and merge it with a merge commit. The check refuses a version that is
    already released.
 4. **The Release workflow** then creates `release/<version>`, the tag `v<version>` and a
-   GitHub release. Its notes list the merged PRs under Features, Fixes and Chores,
-   from the label each PR gets from its branch name.
-5. **Attach the signed DMG** from your Mac:
+   *draft* GitHub release. Its notes list the merged PRs under Features, Fixes and
+   Chores, from the label each PR gets from its branch name.
+5. **Attach the signed DMG and publish** from your Mac (published releases are
+   immutable, so the DMG has to go on while it's a draft):
    ```sh
    git fetch && git switch release/<version>
    scripts/release.sh --upload
