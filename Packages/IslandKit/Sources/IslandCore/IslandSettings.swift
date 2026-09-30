@@ -28,6 +28,17 @@ public struct ModuleSettings: Codable, Equatable, Sendable {
 public struct NowPlayingSettings: Codable, Equatable, Sendable {
     /// Keep a paused track on the island for this long before it leaves.
     public var keepPausedMinutes: Int = 3
+    /// Look up lyrics on LRCLIB when the lyrics page is opened. Only then are
+    /// the track title, artist, album and length sent to lrclib.net.
+    public var lyricsEnabled: Bool = true
+    /// Show the next track (Apple Music) under the artist.
+    public var showUpNext: Bool = true
+    public init() {}
+}
+
+public struct SystemStatsSettings: Codable, Equatable, Sendable {
+    /// Seconds between samples while the dashboard is open. Nothing is sampled while it's closed.
+    public var refreshSeconds: Double = 1
     public init() {}
 }
 
@@ -83,6 +94,8 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     public var calendar = CalendarSettings()
     public var timers = TimerSettings()
     public var battery = BatterySettings()
+    public var systemStats = SystemStatsSettings()
+    public var dashboard: [DashboardItem] = DashboardItem.defaults
 
     public init() {}
 
@@ -111,6 +124,13 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         }
     }
 
+    /// Dashboard widgets whose module is on, in the user's order.
+    public var visibleDashboard: [DashboardItem] {
+        dashboard.filter { item in item.kind.module.map { self[module: $0].enabled } ?? true }
+    }
+
+    public var dashboardRows: Int { max(1, DashboardLayout.rows(visibleDashboard).count) }
+
     public var compactKinds: Set<ActivityKind> {
         Set(ActivityKind.allCases.filter { self[module: $0].enabled && self[module: $0].showInCompact })
     }
@@ -127,6 +147,11 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         s.priority = s.priority.filter { seen.insert($0).inserted }
         for k in ActivityKind.allCases where !seen.contains(k) { s.priority.append(k) }
         s.timers.presetMinutes = Array(Set(s.timers.presetMinutes.filter { $0 > 0 && $0 <= 24 * 60 })).sorted()
+        s.systemStats.refreshSeconds = min(max(s.systemStats.refreshSeconds, 0.5), 10)
+        var seenWidgets = Set<DashboardWidgetKind>()
+        s.dashboard = s.dashboard
+            .filter { seenWidgets.insert($0.kind).inserted }
+            .map { DashboardItem($0.kind, $0.size) }
         return s
     }
 
@@ -136,7 +161,7 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         case material, compactStyle, maxActivities, priority, openOnHover, hoverDelayMs, collapseOnMouseLeave
         case glowFromArtwork, displays, showMenuBarIcon
         case nowPlayingModule, timerModule, calendarModule, batteryModule, backgroundAppsModule
-        case nowPlaying, backgroundApps, calendar, timers, battery
+        case nowPlaying, backgroundApps, calendar, timers, battery, systemStats, dashboard
     }
 
     public init(from decoder: Decoder) throws {
@@ -166,6 +191,16 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         calendar = v(.calendar, d.calendar)
         timers = v(.timers, d.timers)
         battery = v(.battery, d.battery)
+        systemStats = v(.systemStats, d.systemStats)
+        // Unknown widget kinds (from a newer version) are skipped, not fatal.
+        if let raw = try? c.decodeIfPresent([[String: String]].self, forKey: .dashboard) {
+            dashboard = raw.compactMap { item in
+                guard let kind = item["kind"].flatMap(DashboardWidgetKind.init(rawValue:)) else { return nil }
+                return DashboardItem(kind, item["size"].flatMap(WidgetSize.init(rawValue:)) ?? .small)
+            }
+        } else {
+            dashboard = d.dashboard
+        }
         self = normalized()
     }
 
@@ -185,6 +220,14 @@ extension NowPlayingSettings {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         keepPausedMinutes = (try? c.decodeIfPresent(Int.self, forKey: .keepPausedMinutes)) ?? 3
+        lyricsEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .lyricsEnabled)) ?? true
+        showUpNext = (try? c.decodeIfPresent(Bool.self, forKey: .showUpNext)) ?? true
+    }
+}
+extension SystemStatsSettings {
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        refreshSeconds = (try? c.decodeIfPresent(Double.self, forKey: .refreshSeconds)) ?? 1
     }
 }
 extension BackgroundAppsSettings {

@@ -2,15 +2,17 @@ import IslandCore
 import SwiftUI
 
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, layout, appearance, modules, about
+    case general, layout, dashboard, appearance, modules, permissions, about
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .general: "General"
         case .layout: "Layout"
+        case .dashboard: "Dashboard"
         case .appearance: "Appearance"
         case .modules: "Modules"
+        case .permissions: "Permissions"
         case .about: "About"
         }
     }
@@ -18,9 +20,11 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .general: "gearshape.fill"
-        case .layout: "square.grid.2x2.fill"
+        case .layout: "capsule.fill"
+        case .dashboard: "square.grid.2x2.fill"
         case .appearance: "circle.lefthalf.filled"
         case .modules: "square.stack.3d.up.fill"
+        case .permissions: "hand.raised.fill"
         case .about: "info.circle.fill"
         }
     }
@@ -29,15 +33,17 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         switch self {
         case .general: .gray
         case .layout: .blue
+        case .dashboard: .teal
         case .appearance: .indigo
         case .modules: .orange
+        case .permissions: .green
         case .about: .secondary
         }
     }
 }
 
-/// System Settings-style window: sidebar of panes, grouped forms, and it
-/// reopens on the pane you last viewed.
+/// System Settings-style window: sidebar of panes, grouped forms, live
+/// previews, and it reopens on the pane you last viewed.
 struct SettingsView: View {
     @AppStorage("settings.lastPane") private var paneRaw = SettingsPane.layout.rawValue
 
@@ -50,30 +56,62 @@ struct SettingsView: View {
                 Label {
                     Text(pane.title)
                 } icon: {
-                    Image(systemName: pane.symbol)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 22, height: 22)
-                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(pane.color.gradient))
+                    IconBadge(symbol: pane.symbol, color: pane.color, size: 22)
                 }
                 .tag(pane)
             }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 240)
+            .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 250)
         } detail: {
             let pane = SettingsPane(rawValue: paneRaw) ?? .layout
             Group {
                 switch pane {
                 case .general: GeneralPane()
                 case .layout: LayoutPane()
+                case .dashboard: DashboardPane()
                 case .appearance: AppearancePane()
                 case .modules: ModulesPane()
+                case .permissions: PermissionsPane()
                 case .about: AboutPane()
                 }
             }
             .formStyle(.grouped)
             .navigationTitle(pane.title)
         }
-        .frame(minWidth: 720, minHeight: 520)
+        .frame(minWidth: 900, minHeight: 640)
+    }
+}
+
+struct IconBadge: View {
+    let symbol: String
+    let color: Color
+    var size: CGFloat = 22
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: size * 0.5, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(RoundedRectangle(cornerRadius: size * 0.27, style: .continuous).fill(color.gradient))
+    }
+}
+
+/// A section header with a coloured badge and a one-line description.
+private struct RichHeader: View {
+    let title: String
+    let symbol: String
+    let color: Color
+    let summary: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            IconBadge(symbol: symbol, color: color, size: 28)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.headline).foregroundStyle(.primary)
+                Text(summary).font(.callout).foregroundStyle(.secondary)
+            }
+        }
+        .textCase(nil)
+        .padding(.bottom, 2)
     }
 }
 
@@ -103,28 +141,43 @@ private struct GeneralPane: View {
                     ForEach(DisplayMode.allCases) { Text($0.displayName).tag($0) }
                 }
             }
-            Section("Keyboard") {
+            Section("Controls") {
                 LabeledContent("Open or close the dashboard") { Text("⌥⌘I").monospaced() }
+                LabeledContent("Open the island") { Text("Click, or scroll down on it") }
+                LabeledContent("Close the island") { Text("Click outside, or scroll up") }
                 LabeledContent("Island menu") { Text("Right-click the island") }
             }
             Section {
                 HStack {
                     Button("Charging") { env.engine.post(IslandAlert(kind: .battery, style: .chargerConnected(percent: env.battery.info.percent))) }
+                    Button("Low battery") { env.engine.post(IslandAlert(kind: .battery, style: .lowBattery(percent: 9), holdSeconds: 4)) }
                     Button("Timer done") { env.engine.post(IslandAlert(kind: .timer, style: .timerFinished(label: "Tea"), holdSeconds: 4)) }
                     Button("10-second timer") { env.timers.start(minutes: 10.0 / 60, label: "Test timer") }
-                    Button("Open dashboard") { AppDelegate.shared?.islands.toggleDashboard() }
+                    Button("Dashboard") { AppDelegate.shared?.islands.toggleDashboard() }
                 }
             } header: {
                 Text("Try it")
             } footer: {
-                Text("Preview alerts and states without waiting for them to happen.")
+                Text("Preview alerts and states on the real island without waiting for them.")
+            }
+            Section("Links for Shortcuts and scripts") {
+                ForEach(["dynamicisland://dashboard", "dynamicisland://timer?minutes=25&label=Focus", "dynamicisland://play-pause",
+                         "dynamicisland://next", "dynamicisland://collapse"], id: \.self) { link in
+                    LabeledContent(link) {
+                        Button("Copy") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(link, forType: .string)
+                        }
+                    }
+                    .font(.system(.body, design: .monospaced))
+                }
             }
             Section {
                 Button("Reset All Settings…", role: .destructive) { confirmReset = true }
                     .confirmationDialog("Reset all Dynamic Island settings?", isPresented: $confirmReset) {
                         Button("Reset", role: .destructive) { env.settings.resetToDefaults() }
                     } message: {
-                        Text("Layout, appearance and module choices go back to their defaults. Timers keep running.")
+                        Text("Layout, dashboard, appearance and module choices go back to their defaults. Timers keep running.")
                     }
             }
         }
@@ -135,11 +188,15 @@ private struct GeneralPane: View {
 
 private struct LayoutPane: View {
     @Environment(AppEnvironment.self) private var env
+    @State private var preview: PreviewState = .compact
 
     var body: some View {
         @Bindable var store = env.settings
         let s = store.settings
         Form {
+            Section {
+                IslandPreview(state: $preview, states: [.compact, .expanded, .alert])
+            }
             Section {
                 Picker("Compact style", selection: $store.settings.compactStyle) {
                     ForEach(CompactStyle.allCases) { Text($0.displayName).tag($0) }
@@ -162,17 +219,21 @@ private struct LayoutPane: View {
                     LabeledContent("Show up to", value: s.maxActivities == 0 ? "All" : "\(s.maxActivities) at once")
                 }
                 .disabled(s.maxActivities == 0)
+                Stepper(value: $store.settings.backgroundApps.maxIcons, in: 1...24) {
+                    LabeledContent("Background app icons", value: "\(s.backgroundApps.maxIcons)")
+                }
             } header: {
-                Text("Live activities")
+                Text("How much it shows")
             } footer: {
                 Text("The first activity takes the ears. The others appear as small icons you can click, and anything past the limit becomes a +N chip.")
             }
 
             Section {
                 ForEach(Array(s.priority.enumerated()), id: \.element) { index, kind in
-                    HStack {
+                    HStack(spacing: 10) {
                         Text("\(index + 1)").monospacedDigit().foregroundStyle(.secondary).frame(width: 18)
-                        Label(kind.displayName, systemImage: kind.symbolName)
+                        IconBadge(symbol: kind.symbolName, color: kind.tint, size: 22)
+                        Text(kind.displayName)
                         Spacer()
                         Button { move(kind, by: -1) } label: { Image(systemName: "chevron.up") }
                             .buttonStyle(.borderless).disabled(index == 0).accessibilityLabel("Move \(kind.displayName) up")
@@ -184,17 +245,17 @@ private struct LayoutPane: View {
             } header: {
                 Text("Priority")
             } footer: {
-                Text("When several activities are live, the one highest in this list takes the island.")
+                Text("When several activities are live, the one highest in this list takes the island. Drag rows or use the arrows.")
             }
 
-            Section("Opening") {
+            Section("Opening and closing") {
                 Toggle("Open when the pointer rests on the island", isOn: $store.settings.openOnHover)
                 if s.openOnHover {
                     LabeledContent("Delay") {
                         HStack {
                             Slider(value: Binding(get: { Double(store.settings.hoverDelayMs) }, set: { store.settings.hoverDelayMs = Int($0) }),
                                    in: 0...800, step: 50)
-                                .frame(width: 180)
+                                .frame(width: 200)
                             Text("\(s.hoverDelayMs) ms").monospacedDigit().frame(width: 56, alignment: .trailing)
                         }
                     }
@@ -214,21 +275,163 @@ private struct LayoutPane: View {
     }
 }
 
+// MARK: Dashboard
+
+private struct DashboardPane: View {
+    @Environment(AppEnvironment.self) private var env
+    @State private var preview: PreviewState = .dashboard
+
+    var body: some View {
+        @Bindable var store = env.settings
+        let items = store.settings.dashboard
+        let rows = DashboardLayout.rows(store.settings.visibleDashboard).count
+        let available = DashboardWidgetKind.allCases.filter { k in !items.contains { $0.kind == k } }
+        Form {
+            Section {
+                IslandPreview(state: $preview, states: [.dashboard])
+            }
+            Section {
+                if items.isEmpty {
+                    Text("No widgets yet. Add some below.").foregroundStyle(.secondary)
+                }
+                ForEach(Array(items.enumerated()), id: \.element.kind) { index, item in
+                    WidgetRow(item: item, index: index, count: items.count)
+                }
+                .onMove { from, to in store.settings.dashboard.move(fromOffsets: from, toOffset: to) }
+            } header: {
+                Text("On your dashboard")
+            } footer: {
+                Text("Four slots per row, up to three rows. Small widgets take one slot, medium ones two. Your dashboard has \(rows) \(rows == 1 ? "row" : "rows").")
+            }
+            if !available.isEmpty {
+                Section("Add widgets") {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 10)], spacing: 10) {
+                        ForEach(available) { kind in
+                            Button {
+                                withAnimation { store.settings.dashboard.append(DashboardItem(kind, kind.allowedSizes.last ?? .small)) }
+                            } label: {
+                                HStack(spacing: 10) {
+                                    IconBadge(symbol: kind.symbolName, color: kind.tint, size: 30)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(kind.displayName).font(.body.weight(.semibold))
+                                        Text(kind.summary).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                                    }
+                                    Spacer(minLength: 0)
+                                    Image(systemName: "plus.circle.fill").foregroundStyle(.green).font(.title3)
+                                }
+                                .padding(10)
+                                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.quaternary.opacity(0.6)))
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+            Section("System stats") {
+                Picker("Refresh every", selection: $store.settings.systemStats.refreshSeconds) {
+                    Text("½ second").tag(0.5)
+                    Text("1 second").tag(1.0)
+                    Text("2 seconds").tag(2.0)
+                    Text("5 seconds").tag(5.0)
+                }
+                Text("CPU, memory, storage and network are only measured while the dashboard is open.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+private struct WidgetRow: View {
+    let item: DashboardItem
+    let index: Int
+    let count: Int
+    @Environment(AppEnvironment.self) private var env
+
+    var body: some View {
+        let moduleOff = item.kind.module.map { !env.settings.settings[module: $0].enabled } ?? false
+        HStack(spacing: 10) {
+            IconBadge(symbol: item.kind.symbolName, color: item.kind.tint, size: 26)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.kind.displayName)
+                Text(moduleOff ? "Hidden: turn on \(item.kind.module!.displayName) in Modules" : item.kind.summary)
+                    .font(.caption).foregroundStyle(moduleOff ? .orange : .secondary)
+            }
+            Spacer()
+            if item.kind.allowedSizes.count > 1 {
+                Picker("Size", selection: Binding(
+                    get: { item.size },
+                    set: { new in update { $0.size = new } })) {
+                    ForEach(item.kind.allowedSizes) { Text($0.displayName).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 150)
+            } else {
+                Text("Small").font(.caption).foregroundStyle(.secondary).frame(width: 150)
+            }
+            Button { move(-1) } label: { Image(systemName: "chevron.up") }
+                .buttonStyle(.borderless).disabled(index == 0).accessibilityLabel("Move \(item.kind.displayName) up")
+            Button { move(1) } label: { Image(systemName: "chevron.down") }
+                .buttonStyle(.borderless).disabled(index == count - 1).accessibilityLabel("Move \(item.kind.displayName) down")
+            Button {
+                withAnimation { env.settings.settings.dashboard.removeAll { $0.kind == item.kind } }
+            } label: {
+                Image(systemName: "minus.circle.fill").foregroundStyle(.red)
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Remove \(item.kind.displayName)")
+        }
+    }
+
+    private func update(_ body: (inout DashboardItem) -> Void) {
+        guard let i = env.settings.settings.dashboard.firstIndex(where: { $0.kind == item.kind }) else { return }
+        body(&env.settings.settings.dashboard[i])
+    }
+
+    private func move(_ delta: Int) {
+        var list = env.settings.settings.dashboard
+        guard let i = list.firstIndex(where: { $0.kind == item.kind }), list.indices.contains(i + delta) else { return }
+        list.swapAt(i, i + delta)
+        withAnimation { env.settings.settings.dashboard = list }
+    }
+}
+
+extension DashboardWidgetKind {
+    var tint: Color {
+        switch self {
+        case .nowPlaying: .pink
+        case .calendar: .red
+        case .timer: .orange
+        case .battery: .green
+        case .cpu: .blue
+        case .memory: .mint
+        case .storage: .purple
+        case .network: .cyan
+        }
+    }
+}
+
 // MARK: Appearance
 
 private struct AppearancePane: View {
     @Environment(AppEnvironment.self) private var env
+    @State private var preview: PreviewState = .expanded
 
     var body: some View {
         @Bindable var store = env.settings
         let material = store.settings.material
         Form {
             Section {
+                IslandPreview(state: $preview)
+            }
+            Section {
                 Picker("Material", selection: $store.settings.material) {
                     ForEach(IslandMaterial.allCases) { Text($0.displayName).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 Text(Self.describe(material)).font(.callout).foregroundStyle(.secondary)
+                Toggle("Glow from album art", isOn: $store.settings.glowFromArtwork)
             } header: {
                 Text("Island")
             }
@@ -236,16 +439,14 @@ private struct AppearancePane: View {
                 LabeledContent("Glass tint", value: env.look.glassTint.map { "\(Int(($0 * 100).rounded()))% toward tinted" } ?? "System default")
                 LabeledContent("Reduce transparency", value: env.look.reduceTransparency ? "On" : "Off")
                 LabeledContent("Increase contrast", value: env.look.increaseContrast ? "On" : "Off")
+                LabeledContent("Reduce motion", value: env.look.reduceMotion ? "On" : "Off")
                 Button("Open Appearance Settings…") {
                     if let url = URL(string: "x-apple.systempreferences:com.apple.Appearance-Settings.extension") { NSWorkspace.shared.open(url) }
                 }
             } header: {
-                Text("Liquid Glass")
+                Text("From System Settings")
             } footer: {
-                Text("Hybrid and Glass use the system's own Liquid Glass, so they follow the Liquid Glass slider, Reduce Transparency and Increase Contrast in System Settings.")
-            }
-            Section("Now Playing") {
-                Toggle("Glow from album art", isOn: $store.settings.glowFromArtwork)
+                Text("Hybrid and Glass use the system's own Liquid Glass, so they follow the Liquid Glass slider, Reduce Transparency and Increase Contrast. Change them in System Settings and the preview above updates.")
             }
         }
     }
@@ -276,11 +477,21 @@ private struct ModulesPane: View {
                     details(kind, store: store)
                         .disabled(!store.settings[module: kind].enabled)
                 } header: {
-                    Label(kind.displayName, systemImage: kind.symbolName)
+                    RichHeader(title: kind.displayName, symbol: kind.symbolName, color: kind.tint, summary: Self.summary(kind))
                 }
             }
         }
         .onAppear { presetsText = env.settings.settings.timers.presetMinutes.map(String.init).joined(separator: ", ") }
+    }
+
+    static func summary(_ kind: ActivityKind) -> String {
+        switch kind {
+        case .nowPlaying: "Any app's music or video, with controls, lyrics, Up Next and output picker"
+        case .timer: "Countdowns that keep running if you quit the app"
+        case .calendar: "Your next event with a countdown and a Join button"
+        case .battery: "Charging and low-battery moments"
+        case .backgroundApps: "Apps running behind the one you're using; click to switch"
+        }
     }
 
     private func module(_ kind: ActivityKind, _ kp: WritableKeyPath<ModuleSettings, Bool>) -> Binding<Bool> {
@@ -296,12 +507,20 @@ private struct ModulesPane: View {
             Stepper(value: $store.settings.nowPlaying.keepPausedMinutes, in: 0...30) {
                 LabeledContent("Keep a paused track for", value: "\(store.settings.nowPlaying.keepPausedMinutes) min")
             }
+            Toggle("Show the next track under the artist", isOn: $store.settings.nowPlaying.showUpNext)
+            Toggle(isOn: $store.settings.nowPlaying.lyricsEnabled) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Look up lyrics")
+                    Text("When you open lyrics, the song's title, artist, album and length are sent to lrclib.net, a free lyrics database.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
             LabeledContent("Source", value: sourceText)
         case .timer:
             Toggle("Play a sound when a timer ends", isOn: $store.settings.timers.playSound)
             LabeledContent("Presets (minutes)") {
                 TextField("1, 5, 10, 25, 60", text: $presetsText)
-                    .frame(width: 180)
+                    .frame(width: 200)
                     .onSubmit(savePresets)
             }
         case .calendar:
@@ -351,7 +570,7 @@ private struct ModulesPane: View {
     private var sourceText: String {
         switch env.nowPlaying.source {
         case .starting: "Starting…"
-        case .bridge: "System Now Playing"
+        case .bridge: "System Now Playing (any app)"
         case .appleScript: "Music and Spotify only (fallback)"
         case .unavailable: "Unavailable"
         }
@@ -367,6 +586,98 @@ private struct ModulesPane: View {
     static func appName(_ bundleID: String) -> String {
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return bundleID }
         return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
+    }
+}
+
+// MARK: Permissions
+
+private struct PermissionsPane: View {
+    @Environment(AppEnvironment.self) private var env
+    @State private var music = AutomationPermission.unknown
+    @State private var spotify = AutomationPermission.unknown
+
+    var body: some View {
+        Form {
+            Section {
+                PermissionRow(title: "Calendars", symbol: "calendar", color: .red,
+                              reason: "Your next event and its Join button",
+                              status: calendarStatus) {
+                    switch env.calendar.access {
+                    case .notDetermined: Button("Allow") { env.calendar.requestAccess() }
+                    case .denied: Button("Open Settings") { env.calendar.openPrivacySettings() }
+                    case .granted: EmptyView()
+                    }
+                }
+                PermissionRow(title: "Automation · Music", symbol: "music.note", color: .pink,
+                              reason: "Up Next, playing from the playlist, and AirPlay speakers",
+                              status: music.label) {
+                    automationButton(bundleID: MusicScripting.bundleID, status: music) { music = $0 }
+                }
+                PermissionRow(title: "Automation · Spotify", symbol: "music.note.list", color: .green,
+                              reason: "Fallback track info if system Now Playing is unavailable",
+                              status: spotify.label) {
+                    automationButton(bundleID: "com.spotify.client", status: spotify) { spotify = $0 }
+                }
+            } header: {
+                Text("What Dynamic Island can access")
+            } footer: {
+                Text("Nothing else is needed yet. When the volume HUD arrives it will ask for Accessibility, and only when you turn it on.")
+            }
+            Section("What leaves your Mac") {
+                LabeledContent("Lyrics", value: "Title, artist, album and length go to lrclib.net, only when you open lyrics")
+                LabeledContent("Everything else", value: "Stays on this Mac")
+            }
+        }
+        .onAppear(perform: refresh)
+    }
+
+    private var calendarStatus: String {
+        switch env.calendar.access {
+        case .granted: "Allowed"
+        case .denied: "Denied"
+        case .notDetermined: "Not asked yet"
+        }
+    }
+
+    private func refresh() {
+        music = AutomationPermission.status(for: MusicScripting.bundleID)
+        spotify = AutomationPermission.status(for: "com.spotify.client")
+    }
+
+    @ViewBuilder
+    private func automationButton(bundleID: String, status: AutomationPermission, update: @escaping (AutomationPermission) -> Void) -> some View {
+        switch status {
+        case .notDetermined:
+            Button("Allow") { Task { update(await AutomationPermission.request(for: bundleID)) } }
+        case .denied:
+            Button("Open Settings") { AutomationPermission.openSettings() }
+        case .appNotRunning, .unknown:
+            Button("Check Again") { refresh() }
+        case .granted:
+            EmptyView()
+        }
+    }
+}
+
+private struct PermissionRow<Action: View>: View {
+    let title: String
+    let symbol: String
+    let color: Color
+    let reason: String
+    let status: String
+    @ViewBuilder var action: () -> Action
+
+    var body: some View {
+        HStack(spacing: 12) {
+            IconBadge(symbol: symbol, color: color, size: 28)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                Text(reason).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(status).foregroundStyle(status == "Allowed" ? .green : .secondary)
+            action()
+        }
     }
 }
 

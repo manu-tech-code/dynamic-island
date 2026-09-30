@@ -16,7 +16,7 @@ final class SettingsWindowController {
             w.title = "Dynamic Island Settings"
             w.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
             w.toolbarStyle = .unified
-            w.setContentSize(NSSize(width: 760, height: 560))
+            w.setContentSize(NSSize(width: 980, height: 720))
             w.isReleasedWhenClosed = false
             w.center()
             window = w

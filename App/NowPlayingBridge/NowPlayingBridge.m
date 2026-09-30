@@ -15,6 +15,8 @@
 
 #import <Foundation/Foundation.h>
 #include <CommonCrypto/CommonDigest.h>
+#import <objc/message.h>
+#import <objc/runtime.h>
 #include <dlfcn.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -137,10 +139,64 @@ static void handleCommand(NSString *line) {
     else if ([cmd isEqualToString:@"seek"] && parts.count > 1 && setElapsed) setElapsed(parts[1].doubleValue);
 }
 
+/// Prints the now-playing app's playback queue (Up Next) as one JSON line.
+/// Uses MRMediaRemoteRequestNowPlayingPlaybackQueue, which is how system
+/// widgets read the queue; works for Apple Music streaming, unlike AppleScript.
+/// Run in its own short-lived process so a surprise here can't hurt the stream.
+static void emitQueue(NSUInteger count) {
+    @autoreleasepool {
+        NSMutableDictionary *out = [@{@"event": @"queue"} mutableCopy];
+        void *h = mr();
+        Class reqClass = objc_getClass("MRPlaybackQueueRequest");
+        SEL make = sel_registerName("defaultPlaybackQueueRequestWithRange:");
+        // (request, origin/client for the player path (nil = this Mac), queue, completion);
+        // signature read from the function's disassembly on macOS 27.
+        typedef void (*RequestFn)(id, id, id, dispatch_queue_t, void (^)(id, id));
+        RequestFn request = h ? (RequestFn)dlsym(h, "MRMediaRemoteRequestNowPlayingPlaybackQueue") : NULL;
+        if (!reqClass || !request || ![reqClass respondsToSelector:make]) {
+            out[@"error"] = @"queue API unavailable";
+        } else {
+            id req = ((id (*)(id, SEL, NSRange))objc_msgSend)(reqClass, make, NSMakeRange(0, count));
+            dispatch_semaphore_t done = dispatch_semaphore_create(0);
+            __block id result = nil;
+            request(req, nil, nil, dispatch_queue_create("np.queue", DISPATCH_QUEUE_SERIAL), ^(id queue, id error) {
+                (void)error; // not touched: its type isn't documented
+                result = queue;
+                dispatch_semaphore_signal(done);
+            });
+            if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC)) != 0) {
+                out[@"error"] = @"timeout";
+            } else if (result && [result isKindOfClass:objc_getClass("MRPlaybackQueue")]) {
+                NSMutableArray *items = [NSMutableArray array];
+                NSArray *contentItems = [result valueForKey:@"contentItems"];
+                for (id item in contentItems) {
+                    id md = [item valueForKey:@"metadata"];
+                    if (!md) continue;
+                    [items addObject:@{
+                        @"id": jsonSafe([item valueForKey:@"identifier"]),
+                        @"title": jsonSafe([md valueForKey:@"title"]),
+                        @"artist": jsonSafe([md valueForKey:@"trackArtistName"]),
+                        @"album": jsonSafe([md valueForKey:@"albumName"]),
+                        @"duration": jsonSafe([md valueForKey:@"duration"]),
+                        @"playing": jsonSafe([md valueForKey:@"currentlyPlaying"]),
+                    }];
+                }
+                out[@"items"] = items;
+                out[@"location"] = jsonSafe([result valueForKey:@"location"]);
+            } else {
+                out[@"items"] = @[];
+            }
+        }
+        NSData *data = [NSJSONSerialization dataWithJSONObject:out options:0 error:nil];
+        if (data) { fwrite(data.bytes, 1, data.length, stdout); fputc('\n', stdout); fflush(stdout); }
+    }
+}
+
 void np_run(void *interp, void *cv) {
     (void)interp; (void)cv;
     const char *modeC = getenv("NP_MODE");
     NSString *mode = modeC ? @(modeC) : @"once";
+    if ([mode hasPrefix:@"queue:"]) { emitQueue((NSUInteger)MAX(1, [[mode substringFromIndex:6] integerValue])); exit(0); }
     if (![mode hasPrefix:@"stream:"]) { emit("once"); exit(0); }
     double seconds = [[mode substringFromIndex:7] doubleValue];
 

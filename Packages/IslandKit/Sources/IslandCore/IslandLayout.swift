@@ -61,8 +61,16 @@ public enum IslandMetrics {
     public static let earInnerGap: CGFloat = 14
     public static let glyph: CGFloat = 20
     public static let glyphSpacing: CGFloat = 6
-    public static let overflowChip: CGFloat = 26
-    public static let dashboard = CGSize(width: 680, height: 252)
+    /// Default one-row dashboard; the real height follows the widget rows.
+    public static let dashboard = DashboardLayout.size(rows: 1, notchHeight: 32)
+    /// Now Playing with lyrics or Up Next open.
+    public static let nowPlayingDetail = CGSize(width: 520, height: 340)
+
+    /// Width of the "+N" chip, sized for its digits.
+    public static func overflowChipWidth(_ count: Int) -> CGFloat {
+        guard count > 0 else { return 0 }
+        return 16 + 7.5 * CGFloat(String(count).count + 1)
+    }
 
     // MARK: compact
 
@@ -86,7 +94,7 @@ public enum IslandMetrics {
     public static func secondaryWidth(secondaries: Int, overflow: Int) -> CGFloat {
         var w: CGFloat = 0
         if secondaries > 0 { w += 8 + iconRowWidth(count: secondaries) }
-        if overflow > 0 { w += glyphSpacing + overflowChip }
+        if overflow > 0 { w += glyphSpacing + overflowChipWidth(overflow) }
         return w
     }
 
@@ -99,11 +107,11 @@ public enum IslandMetrics {
             var leading = primaryEarContent(primary.payload)
             var trailing = leading
             if case .backgroundApps(let apps) = primary.payload {
-                let shown = min(apps.count, backgroundIconLimit)
-                let chip = apps.count > shown
+                let shown = min(apps.count, max(1, backgroundIconLimit))
+                let hidden = apps.count - shown
                 let left = Int((Double(shown) / 2).rounded(.up))
                 leading = iconRowWidth(count: left)
-                trailing = iconRowWidth(count: shown - left) + (chip ? glyphSpacing + overflowChip : 0)
+                trailing = iconRowWidth(count: shown - left) + (hidden > 0 ? glyphSpacing + overflowChipWidth(hidden) : 0)
             }
             trailing += secondaryWidth(secondaries: secondaries, overflow: overflow)
             let ear = earOuterPadding + max(leading, trailing) + earInnerGap
@@ -111,8 +119,9 @@ public enum IslandMetrics {
         case .below:
             var content: CGFloat = 0
             if case .backgroundApps(let apps) = primary.payload {
-                let shown = min(apps.count, backgroundIconLimit)
-                content = iconRowWidth(count: shown) + (apps.count > shown ? glyphSpacing + overflowChip : 0)
+                let shown = min(apps.count, max(1, backgroundIconLimit))
+                let hidden = apps.count - shown
+                content = iconRowWidth(count: shown) + (hidden > 0 ? glyphSpacing + overflowChipWidth(hidden) : 0)
             }
             content += secondaryWidth(secondaries: secondaries, overflow: overflow)
             let width = max(notch.width + 24, 2 * earOuterPadding + content + (content > 0 ? 60 : 0))
@@ -151,7 +160,7 @@ public enum IslandMetrics {
         case ..<72: 18
         case ..<112: 28
         case ..<220: 34
-        default: 36
+        default: 38
         }
     }
 
@@ -167,14 +176,14 @@ public enum IslandMetrics {
 
     /// Body size for a presentation, before hover growth.
     public static func bodySize(for presentation: IslandPresentation, notch: CGSize, style: CompactStyle,
-                                ranked: RankedActivities, backgroundIconLimit: Int) -> CGSize {
+                                ranked: RankedActivities, backgroundIconLimit: Int, dashboardRows: Int = 1) -> CGSize {
         switch presentation {
         case .idle: return idleSize(notch: notch)
         case .compact: return compactSize(notch: notch, style: style, ranked: ranked, backgroundIconLimit: backgroundIconLimit)
         case .expanded(let id):
-            guard let a = ranked.all.first(where: { $0.id == id }) else { return dashboard }
+            guard let a = ranked.all.first(where: { $0.id == id }) else { return DashboardLayout.size(rows: dashboardRows, notchHeight: notch.height) }
             return expandedSize(for: a.kind)
-        case .dashboard: return dashboard
+        case .dashboard: return DashboardLayout.size(rows: dashboardRows, notchHeight: notch.height)
         case .alert(let alert): return alertSize(for: alert.style)
         }
     }

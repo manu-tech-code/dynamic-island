@@ -66,7 +66,7 @@ import Testing
         #expect(IslandMetrics.radius(forHeight: 60) == 18)
         #expect(IslandMetrics.radius(forHeight: 88) == 28)
         #expect(IslandMetrics.radius(forHeight: 188) == 34)
-        #expect(IslandMetrics.radius(forHeight: 252) == 36)
+        #expect(IslandMetrics.radius(forHeight: 252) == 38)
     }
 
     @Test func hardwareNotchFromAuxiliaryAreas() {

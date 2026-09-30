@@ -15,7 +15,8 @@ final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
 
 /// One island on one display: its panel, hit testing, hover, gestures and menu.
 final class IslandController: NSObject {
-    static let panelSize = CGSize(width: 860, height: 340)
+    /// Room for the tallest dashboard (three widget rows) plus the glow.
+    static let panelSize = CGSize(width: 860, height: 600)
 
     let displayID: CGDirectDisplayID
     let model: IslandViewModel
@@ -50,6 +51,7 @@ final class IslandController: NSObject {
         panel.contentView = host
         update(screen: screen)
         panel.orderFrontRegardless()
+        model.presentMenu = { [weak self] menu in self?.popUp(menu) }
         whenChanged({ [model] in "\(model.contentKey) \(Int(model.outerSize.width))×\(Int(model.outerSize.height))" }) { [displayID] in
             Log.info("island \(displayID): \($0)")
         }
@@ -132,6 +134,14 @@ final class IslandController: NSObject {
         if model.isOpen, !inside { scheduleCollapse(after: 6) }
     }
 
+    /// Opens Now Playing on a page (from a link or shortcut).
+    func showNowPlaying(page: NowPlayingPage) {
+        guard let id = env.engine.live.first(where: { $0.kind == .nowPlaying })?.id else { return }
+        model.open(id)
+        if page != .player { model.showPage(page) }
+        if !inside { scheduleCollapse(after: 20) }
+    }
+
     private func scheduleCollapse(after seconds: Double) {
         leaveTask?.cancel()
         leaveTask = Task { [weak self] in
@@ -144,6 +154,8 @@ final class IslandController: NSObject {
     /// Two-finger scroll on the island: pull down to open, push up to close.
     func scroll(_ event: NSEvent) -> Bool {
         guard contains(NSEvent.mouseLocation) else { return false }
+        // Lyrics and Up Next are lists; let SwiftUI scroll them.
+        if model.hasScrollableContent { return false }
         let isWheel = event.phase == [] && event.momentumPhase == []
         if event.phase == .began { scrollAccumulated = 0; scrollHandled = false }
         if event.phase == .ended || event.phase == .cancelled { scrollAccumulated = 0; scrollHandled = false; return true }
@@ -202,8 +214,15 @@ final class IslandController: NSObject {
         add(menu, "Settings…", #selector(menuSettings)).keyEquivalent = ","
         add(menu, "Quit Dynamic Island", #selector(menuQuit)).keyEquivalent = "q"
 
-        let p = panel.convertPoint(fromScreen: NSEvent.mouseLocation)
-        menu.popUp(positioning: nil, at: p, in: panel.contentView)
+        popUp(menu)
+    }
+
+    /// Pops a menu at the pointer. The hosting view is flipped (y grows down),
+    /// so the point must go through the view, not just the window.
+    func popUp(_ menu: NSMenu) {
+        guard let view = panel.contentView else { return }
+        let inWindow = panel.convertPoint(fromScreen: NSEvent.mouseLocation)
+        menu.popUp(positioning: nil, at: view.convert(inWindow, from: nil), in: view)
     }
 
     @discardableResult

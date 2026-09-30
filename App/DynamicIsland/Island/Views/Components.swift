@@ -148,22 +148,27 @@ struct IslandCapsuleButton: View {
     }
 }
 
-/// Card inside the dashboard: fill instead of glass, radius concentric with the island.
+/// Card inside the dashboard: fill instead of glass (no glass on glass), and a
+/// radius concentric with the island (outer radius minus the padding).
 struct IslandCard<Content: View>: View {
     var title: String
+    var symbol: String?
+    var radius: CGFloat = 22
     @ViewBuilder var content: () -> Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title.uppercased())
-                .font(.system(size: 10, weight: .bold))
-                .tracking(0.6)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 5) {
+                if let symbol { Image(systemName: symbol) }
+                Text(title.uppercased()).tracking(0.6).lineLimit(1)
+            }
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(.secondary)
             content()
         }
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(.primary.opacity(0.07)))
+        .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(.primary.opacity(0.07)))
     }
 }
 

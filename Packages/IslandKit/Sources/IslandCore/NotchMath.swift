@@ -4,6 +4,11 @@ public struct NotchRect: Equatable, Sendable {
     /// Camera housing (or virtual notch) in global screen coordinates, y up.
     public var rect: CGRect
     public var isHardware: Bool
+
+    public init(rect: CGRect, isHardware: Bool) {
+        self.rect = rect
+        self.isHardware = isHardware
+    }
 }
 
 public enum NotchMath {

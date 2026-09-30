@@ -44,84 +44,6 @@ struct EarRow<Leading: View, Trailing: View>: View {
     }
 }
 
-// MARK: Now Playing
-
-private struct NowPlayingExpanded: View {
-    let info: NowPlayingInfo
-    let model: IslandViewModel
-    @Environment(AppEnvironment.self) private var env
-
-    var body: some View {
-        let np = env.nowPlaying
-        let tint = np.artworkColor.map(Color.init(nsColor:)) ?? .pink
-        EarRow(model: model) {
-            Image(systemName: "music.note").foregroundStyle(tint)
-            Text(np.sourceApp?.localizedName ?? "Now Playing").lineLimit(1)
-        } trailing: {
-            Waveform(playing: info.isPlaying, color: tint)
-        }
-        HStack(spacing: 14) {
-            Button { np.openSourceApp() } label: {
-                ArtworkView(image: np.artwork, size: 80, radius: 18)
-                    .shadow(color: .black.opacity(0.25), radius: 10, y: 5)
-            }
-            .buttonStyle(.plain)
-            .help("Open \(np.sourceApp?.localizedName ?? "player")")
-            VStack(alignment: .leading, spacing: 3) {
-                Text(info.title).font(.system(size: 16, weight: .semibold)).lineLimit(1)
-                Text([info.artist, info.album].filter { !$0.isEmpty }.joined(separator: " · "))
-                    .font(.system(size: 13)).foregroundStyle(.secondary).lineLimit(1)
-            }
-            Spacer(minLength: 8)
-            HStack(spacing: 4) {
-                IslandIconButton(systemName: "backward.fill", size: 34, label: "Previous track") { np.previous() }
-                IslandIconButton(systemName: info.isPlaying ? "pause.fill" : "play.fill", size: 44, label: info.isPlaying ? "Pause" : "Play") { np.togglePlayPause() }
-                    .contentTransition(.symbolEffect(.replace))
-                IslandIconButton(systemName: "forward.fill", size: 34, label: "Next track") { np.next() }
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 10)
-        Spacer(minLength: 0)
-        TimelineView(.periodic(from: .now, by: info.isPlaying ? 1 : 3600)) { ctx in
-            let elapsed = info.elapsed(at: ctx.date) ?? 0
-            let duration = info.duration ?? 0
-            HStack(spacing: 10) {
-                Text(IslandFormat.position(elapsed)).monospacedDigit()
-                SeekBar(fraction: duration > 0 ? elapsed / duration : 0) { f in
-                    if duration > 0 { np.seek(to: f * duration) }
-                }
-                Text("−" + IslandFormat.position(max(0, duration - elapsed))).monospacedDigit()
-            }
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(.secondary)
-            .opacity(duration > 0 ? 1 : 0)
-        }
-        .padding(.horizontal, 18)
-        .padding(.bottom, 16)
-    }
-}
-
-private struct SeekBar: View {
-    let fraction: Double
-    let onSeek: (Double) -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        GeometryReader { geo in
-            ProgressTrack(fraction: fraction, height: hovering ? 7 : 5)
-                .frame(maxHeight: .infinity)
-                .contentShape(Rectangle())
-                .onTapGesture(coordinateSpace: .local) { p in
-                    onSeek(max(0, min(1, p.x / max(1, geo.size.width))))
-                }
-        }
-        .frame(height: 14)
-        .onHover { hovering = $0 }
-        .animation(.snappy(duration: 0.2), value: hovering)
-    }
-}
-
 // MARK: Timer
 
 private struct TimerExpanded: View {
@@ -251,6 +173,14 @@ struct BatteryRing: View {
 }
 
 enum BatteryText {
+    /// One or two words, for tight spaces.
+    static func state(_ b: BatteryInfo) -> String {
+        guard b.hasBattery else { return "Power adapter" }
+        if b.isCharging { return "Charging" }
+        if b.isPluggedIn { return "Plugged in" }
+        return b.percent <= 20 ? "Low battery" : "On battery"
+    }
+
     static func headline(_ b: BatteryInfo) -> String {
         guard b.hasBattery else { return "Power adapter" }
         if b.isCharging { return "Charging · \(b.percent)%" }

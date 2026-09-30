@@ -196,9 +196,12 @@ struct OverflowChip: View {
         Text("+\(count)")
             .font(.system(size: 11, weight: .bold))
             .monospacedDigit()
-            .padding(.horizontal, 6)
-            .frame(minWidth: IslandMetrics.overflowChip, minHeight: 18)
-            .background(Capsule().fill(.white.opacity(0.16)))
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 7)
+            .frame(minWidth: IslandMetrics.overflowChipWidth(count), minHeight: 18)
+            // Follows the ear's foreground, so it reads on black and on glass.
+            .background(Capsule().fill(.quaternary))
             .accessibilityLabel("\(count) more")
     }
 }

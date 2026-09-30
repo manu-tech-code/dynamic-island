@@ -13,6 +13,9 @@ final class AppEnvironment {
     let battery: BatteryService
     let calendar: CalendarService
     let backgroundApps: BackgroundAppsService
+    let audioOutput: AudioOutputService
+    let lyrics: LyricsService
+    let systemStats: SystemStatsService
 
     @ObservationIgnored var openSettings: () -> Void = {}
 
@@ -27,6 +30,9 @@ final class AppEnvironment {
         battery = BatteryService(settings: settings, engine: engine)
         calendar = CalendarService(settings: settings, engine: engine)
         backgroundApps = BackgroundAppsService(settings: settings)
+        audioOutput = AudioOutputService()
+        lyrics = LyricsService(settings: settings)
+        systemStats = SystemStatsService(settings: settings)
         [nowPlaying, timers, battery, calendar, backgroundApps].forEach(engine.register)
     }
 
@@ -35,6 +41,7 @@ final class AppEnvironment {
         battery.start()
         calendar.start()
         backgroundApps.start()
+        audioOutput.start()
     }
 
     func stop() {
