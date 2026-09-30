@@ -82,6 +82,8 @@ public struct NowPlayingSettings: Codable, Equatable, Sendable {
     public var lyricsEnabled: Bool = true
     /// Show the next track under the artist.
     public var showUpNext: Bool = true
+    /// Resting the pointer on the compact island shows the title and artist under it.
+    public var titleOnHover: Bool = true
     public init() {}
 }
 

@@ -14,6 +14,9 @@ final class IslandViewModel {
     let env: AppEnvironment
     var notch: NotchRect
     private(set) var hover = false
+    /// The pointer has rested on the compact island long enough to show the track's title.
+    private(set) var peek = false
+    @ObservationIgnored private var peekTask: Task<Void, Never>?
     private(set) var userState: UserState = .none
     private(set) var nowPlayingPage: NowPlayingPage = .player
     /// Pins the presentation, for the preview in Settings.
@@ -118,6 +121,24 @@ final class IslandViewModel {
                                         dashboardButton: c.dashboardButton, maxWidth: c.compactMaxWidth).size.width
     }
 
+    /// The track playing on the compact island, while it shows its title under the ears.
+    var peekingTrack: NowPlayingInfo? {
+        guard peek, !isPreview, settings.nowPlaying.titleOnHover, presentation == .compact,
+              case .nowPlaying(let info)? = compactFit.ranked.primary?.payload, !info.title.isEmpty else { return nil }
+        return info
+    }
+
+    private var peekHeight: CGFloat {
+        guard let info = peekingTrack else { return 0 }
+        return IslandMetrics.nowPlayingPeekHeight(style: settings.compactStyle, hasArtist: !info.artist.isEmpty)
+    }
+
+    /// Height of the Hybrid material's black collar: the notch, plus the title
+    /// row while peeking beside the notch (it belongs to the ears).
+    var collarHeight: CGFloat {
+        notch.rect.height + (settings.compactStyle == .beside ? peekHeight : 0)
+    }
+
     var bodySize: CGSize {
         let p = presentation
         var size: CGSize
@@ -132,7 +153,16 @@ final class IslandViewModel {
         if hover {
             let g = IslandMetrics.hoverGrowth(for: p)
             size.width += g.width
-            size.height += g.height
+            if settings.compactStyle == .below, let track = peekingTrack {
+                let fit = compactFit.ranked
+                let title = (track.title as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold)]).width
+                size.width = IslandMetrics.belowPeekWidth(band: size.width, titleWidth: title, secondaries: fit.secondaries.count,
+                                                          overflow: fit.overflow.count, dashboardButton: showsDashboardButton,
+                                                          maxWidth: settings.compactMaxWidth > 0 ? settings.compactMaxWidth : nil)
+            }
+            // The title row replaces the small lean downwards.
+            let peek = peekHeight
+            size.height += peek > 0 ? peek : g.height
         }
         return size
     }
@@ -213,7 +243,8 @@ final class IslandViewModel {
     }
 
     var radius: CGFloat {
-        IslandMetrics.radius(forHeight: bodySize.height)
+        // Peeking stays in the small-card corner family (18 pt), however tall the band gets.
+        IslandMetrics.radius(forHeight: peekHeight > 0 ? min(bodySize.height, 70) : bodySize.height)
     }
 
     var material: IslandMaterial { settings.material }
@@ -246,7 +277,23 @@ final class IslandViewModel {
     func setHover(_ inside: Bool) {
         guard hover != inside else { return }
         withAnimation(reduceMotion ? nil : .spring(duration: 0.35, bounce: 0.15)) { hover = inside }
+        peekTask?.cancel()
+        if inside {
+            // A short rest first, so sweeping across the menu bar doesn't flash it.
+            peekTask = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(220))
+                guard !Task.isCancelled, let self, self.hover else { return }
+                withAnimation(self.reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.42, bounce: 0.18)) { self.peek = true }
+            }
+        } else if peek {
+            withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.34, bounce: 0.04)) { peek = false }
+        }
     }
+
+    #if DEBUG
+    /// Offline renders of the hover state.
+    func debugPeek(_ on: Bool) { hover = on; peek = on }
+    #endif
 
     // MARK: actions
 

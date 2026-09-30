@@ -12,15 +12,19 @@ struct IslandRootView: View {
         let shape = NotchShape(bottomRadius: model.radius, shoulder: IslandMetrics.shoulder)
 
         ZStack(alignment: .top) {
-            if let glow = model.glowColor {
-                shape.fill(glow)
-                    .frame(width: size.width, height: size.height)
-                    .blur(radius: 22)
-                    .opacity(0.55)
-                    .offset(y: 6)
-                    .transition(.opacity)
-                    .allowsHitTesting(false)
+            ZStack {
+                if let glow = model.glowColor {
+                    shape.fill(glow)
+                        .frame(width: size.width, height: size.height)
+                        .blur(radius: 22)
+                        .opacity(0.55)
+                        .offset(y: 6)
+                        .transition(.opacity)
+                        .allowsHitTesting(false)
+                }
             }
+            // Only the glow: it fades in and out and eases between artwork colours.
+            .animation(model.reduceMotion ? nil : .easeInOut(duration: 0.5), value: model.glowColor)
 
             IslandContent(model: model)
                 .frame(width: size.width, height: size.height, alignment: .top)
@@ -75,15 +79,18 @@ struct IslandRootView: View {
         case .black:
             shape.fill(.black)
         case .hybrid:
-            let collar = model.notch.rect.height
-            let fade = model.env.look.collarFade(open: model.isOpen)
-            let h = max(size.height, 1)
-            Rectangle().fill(.black)
-                .mask(LinearGradient(stops: [
-                    .init(color: .black, location: 0),
-                    .init(color: .black, location: min(1, collar / h)),
-                    .init(color: .clear, location: min(1, (collar + fade) / h)),
-                ], startPoint: .top, endPoint: .bottom))
+            // Sized in points, not as gradient stops relative to the height:
+            // stops were computed for the final height, so while the island
+            // grew the collar shrank, and while it shrank the whole island
+            // flashed black. Frames animate with the shape instead.
+            VStack(spacing: 0) {
+                Rectangle().fill(.black).frame(height: model.collarHeight)
+                LinearGradient(colors: [.black, .black.opacity(0)], startPoint: .top, endPoint: .bottom)
+                    .frame(height: model.env.look.collarFade(open: model.isOpen))
+                Spacer(minLength: 0)
+            }
+            .frame(width: size.width, height: size.height, alignment: .top)
+            .clipped()
         case .glass:
             Color.clear
         }

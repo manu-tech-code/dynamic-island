@@ -118,6 +118,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     Log.info("render \(name) \(Int(img.size.width))×\(Int(img.size.height)) outer \(model.outerSize)")
                 }
             }
+        case "debug-render-peek":
+            // The compact island with the title under it, both styles; the live track must be primary.
+            let saved = env.settings.settings.compactStyle
+            let samples = [NowPlayingInfo(title: "Emagination (B - Side)", artist: "Amtrac", isPlaying: true),
+                           NowPlayingInfo(title: "A Much Longer Title That Cannot Possibly Fit Under The Ears (Extended Mix)",
+                                          artist: "Somebody feat. Somebody Else", isPlaying: true)]
+            let savedTrack = env.nowPlaying.debugSwapInfo(samples[0])
+            defer { _ = env.nowPlaying.debugSwapInfo(savedTrack) }
+            for (i, sample) in samples.enumerated() {
+            _ = env.nowPlaying.debugSwapInfo(sample)
+            for style in CompactStyle.allCases {
+                env.settings.settings.compactStyle = style
+                let model = IslandViewModel(env: env, notch: NotchRect(rect: CGRect(x: 0, y: 0, width: 185, height: 32), isHardware: false))
+                for on in [false, true] {
+                    model.debugPeek(on)
+                    let r = ImageRenderer(content: PreviewCanvas(model: model, availableWidth: 760).environment(env))
+                    r.scale = 2
+                    if let img = r.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+                        let name = "peek\(i)-\(style.rawValue)-\(on ? "on" : "off").png"
+                        try? rep.representation(using: .png, properties: [:])?.write(to: Log.fileURL.deletingLastPathComponent().appendingPathComponent(name))
+                        Log.info("render \(name) outer \(model.outerSize) radius \(model.radius) collar \(model.collarHeight) track \(model.peekingTrack?.title ?? "none") primary \(model.compactFit.ranked.primary?.kind.rawValue ?? "-") visible \(model.compactFit.ranked.visible.map(\.kind.rawValue))")
+                    }
+                }
+            }
+            }
+            env.settings.settings.compactStyle = saved
         case "debug-phase2":
             Log.info("shortcuts: \(env.shortcuts.all.count) available")
             Log.info("devices: \(env.devices.connected.map { "\($0.name) [\($0.kind)] \(DevicesModuleSettings.batteryText($0))" })")

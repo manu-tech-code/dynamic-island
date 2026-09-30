@@ -286,6 +286,31 @@ public enum IslandMetrics {
         }
     }
 
+    /// Extra height under the compact island while the pointer rests on a track:
+    /// title and artist lines under the ears (beside), or the artist under the
+    /// band's title (below). Beside, the shape stays under 72 pt, so it keeps
+    /// the small-corner radius; the island keeps its compact radius while peeking.
+    public static func nowPlayingPeekHeight(style: CompactStyle, hasArtist: Bool) -> CGFloat {
+        switch style {
+        case .beside: hasArtist ? 38 : 24
+        case .below: hasArtist ? 18 : 0
+        }
+    }
+
+    /// Below the notch, the band's title gets whatever its icons leave. While the
+    /// title peeks, the band widens until the title fits: by at most `maxExtra`
+    /// (past that it scrolls), never past `maxWidth`, and never narrower.
+    public static func belowPeekWidth(band: CGFloat, titleWidth: CGFloat, secondaries: Int, overflow: Int,
+                                      dashboardButton: Bool, maxWidth: CGFloat?, maxExtra: CGFloat = 160) -> CGFloat {
+        // Padding, artwork, the spacer and the waveform, with the band's 8 pt spacing.
+        let chrome: CGFloat = 2 * 14 + 18 + 8 + 8 + 4 + 8 + 18
+        let glyphs = secondaryWidth(secondaries: secondaries, overflow: overflow)
+        let used = chrome + (glyphs > 0 ? 8 + glyphs : 0) + (dashboardButton ? 8 + 22 : 0)
+        var width = min(max(band, used + titleWidth.rounded(.up) + 2), band + maxExtra)
+        if let maxWidth, maxWidth > 0 { width = min(width, max(band, maxWidth)) }
+        return width
+    }
+
     /// Everything besides the presentation that decides the island's size.
     public struct Context: Equatable, Sendable {
         public var notch: CGSize
