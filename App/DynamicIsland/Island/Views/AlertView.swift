@@ -9,6 +9,8 @@ struct AlertView: View {
     var body: some View {
         if alert.isHUD {
             HUDView(style: alert.style, model: model)
+        } else if alert.isCompact {
+            CompactAlertView(alert: alert, model: model)
         } else {
             VStack(spacing: 0) {
                 Color.clear.frame(height: model.notch.rect.height)

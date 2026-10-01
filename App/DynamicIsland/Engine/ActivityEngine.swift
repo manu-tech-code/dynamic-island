@@ -84,13 +84,29 @@ final class ActivityEngine {
         showNext()
     }
 
+    /// The pointer is reading the alert (its details are open): keep it up.
+    func holdAlert() {
+        guard alert != nil else { return }
+        alertTask?.cancel()
+    }
+
+    /// The pointer left: let the alert go after a short beat.
+    func releaseAlert(after seconds: TimeInterval = 1.2) {
+        guard alert != nil else { return }
+        scheduleDismiss(after: seconds)
+    }
+
     private func showNext() {
         guard !queue.isEmpty else { alert = nil; return }
         let next = queue.removeFirst()
         alert = next
+        scheduleDismiss(after: next.holdSeconds)
+    }
+
+    private func scheduleDismiss(after seconds: TimeInterval) {
         alertTask?.cancel()
         alertTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(next.holdSeconds))
+            try? await Task.sleep(for: .seconds(seconds))
             guard !Task.isCancelled else { return }
             self?.alert = nil
             try? await Task.sleep(for: .milliseconds(450))
