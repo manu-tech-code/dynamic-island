@@ -58,6 +58,8 @@ final class IslandController: NSObject {
     private var inside = false
     private var hoverOpenTask: Task<Void, Never>?
     private var leaveTask: Task<Void, Never>?
+    private var revealTask: Task<Void, Never>?
+    private var concealTask: Task<Void, Never>?
     private var scrollAccumulated: CGFloat = 0
     private var scrollHandled = false
 
@@ -87,6 +89,11 @@ final class IslandController: NSObject {
         panel.orderFrontRegardless()
         model.presentMenu = { [weak self] menu in self?.popUp(menu) }
         panel.onCancel = { [weak self] in self?.model.collapse() }
+        // Closing an open state with the pointer elsewhere: a hidden island tucks back in.
+        whenChanged({ [model] in model.isOpen }) { [weak self] open in
+            guard let self, !open, self.model.hidesUntilHover else { return }
+            self.updateReveal(at: NSEvent.mouseLocation)
+        }
         // Hand the keyboard back once the island closes.
         whenChanged({ [model] in model.isOpen }) { [weak self] open in
             guard let self, !open, self.panel.isKeyWindow else { return }
@@ -169,6 +176,7 @@ final class IslandController: NSObject {
 
     func pointerMoved(to p: NSPoint) {
         guard !env.lock.isLocked else { return }
+        if model.hidesUntilHover { updateReveal(at: p) }
         let now = contains(p)
         if panel.ignoresMouseEvents == now { panel.ignoresMouseEvents = !now }
         // The title drops down only while the pointer is on the track itself.
@@ -191,6 +199,36 @@ final class IslandController: NSObject {
         } else {
             hoverOpenTask?.cancel()
             if s.collapseOnMouseLeave, model.isOpen { scheduleCollapse(after: 0.45) }
+        }
+    }
+
+    /// When the pointer is at the camera: a short rest on the camera brings the
+    /// island out (so a pass across the menu bar doesn't), and leaving the island
+    /// tucks it back in a moment later. Open states stay until they close.
+    private func updateReveal(at p: NSPoint) {
+        let atCamera = IslandMetrics.revealArea(notch: model.notch.rect).contains(p)
+        if atCamera || (model.revealed && contains(p)) {
+            concealTask?.cancel()
+            concealTask = nil
+            guard atCamera, !model.revealed, revealTask == nil else { return }
+            revealTask = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(90))
+                guard let self, !Task.isCancelled else { return }
+                self.revealTask = nil
+                if IslandMetrics.revealArea(notch: self.model.notch.rect).contains(NSEvent.mouseLocation) {
+                    self.model.setRevealed(true)
+                }
+            }
+        } else {
+            revealTask?.cancel()
+            revealTask = nil
+            guard model.revealed, !model.isOpen, concealTask == nil else { return }
+            concealTask = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(550))
+                guard let self, !Task.isCancelled else { return }
+                self.concealTask = nil
+                if !self.contains(NSEvent.mouseLocation), !self.model.isOpen { self.model.setRevealed(false) }
+            }
         }
     }
 

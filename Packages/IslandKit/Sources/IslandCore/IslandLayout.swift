@@ -264,6 +264,16 @@ public enum IslandMetrics {
         }
     }
 
+    /// Where the pointer brings a hidden island out (see `IslandVisibility.onHover`):
+    /// the camera housing, a little wider on each side and a sliver below it, so
+    /// it's easy to hit without covering the menu bar. In screen coordinates
+    /// (origin bottom-left), like the notch rect.
+    public static let revealMargin: CGFloat = 28
+    public static func revealArea(notch: CGRect) -> CGRect {
+        CGRect(x: notch.minX - revealMargin, y: notch.minY - 6,
+               width: notch.width + 2 * revealMargin, height: notch.height + 6)
+    }
+
     /// The lock that opens when the Mac unlocks: a lock in the left ear.
     public static func lockSize(notch: CGSize) -> CGSize {
         CGSize(width: notch.width + 2 * (earOuterPadding + glyph + earInnerGap), height: notch.height)

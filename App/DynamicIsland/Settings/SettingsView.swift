@@ -142,6 +142,9 @@ private struct GeneralPane: View {
                 }
             }
             Section {
+                Picker("Show the island", selection: $store.settings.visibility) {
+                    ForEach(IslandVisibility.allCases) { Text($0.displayName).tag($0) }
+                }
                 Picker("When an app is full screen", selection: $store.settings.fullScreen) {
                     ForEach(FullScreenBehavior.allCases) { Text($0.displayName).tag($0) }
                 }
@@ -150,7 +153,7 @@ private struct GeneralPane: View {
             } header: {
                 Text("Where it shows")
             } footer: {
-                Text("“Unless something is live” keeps music, timers, calls and downloads visible over full-screen apps, and hides the rest. Alerts always show.")
+                Text("“When the pointer is at the camera” keeps the island tucked under the notch until you point at the camera. “Unless something is live” keeps music, timers, calls and downloads visible over full-screen apps, and hides the rest. Alerts always show.")
             }
             Section("Controls") {
                 LabeledContent("Open or close the dashboard") { HotKeyRecorder() }
