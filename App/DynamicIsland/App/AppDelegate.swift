@@ -122,6 +122,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     Log.info("render \(name) \(Int(img.size.width))×\(Int(img.size.height)) outer \(model.outerSize)")
                 }
             }
+        case "debug-visibility":
+            // dynamicisland://debug-visibility?mode=onHover|always&reveal=1|0
+            if let mode = query["mode"].flatMap(IslandVisibility.init(rawValue:)) { env.settings.settings.visibility = mode }
+            if let reveal = query["reveal"] { islands.controllers.values.forEach { $0.model.setRevealed(reveal == "1") } }
+            for c in islands.controllers.values {
+                Log.info("visibility \(c.model.settings.visibility.rawValue), revealed \(c.model.revealed): \(c.model.contentKey) \(Int(c.model.outerSize.width))×\(Int(c.model.outerSize.height))")
+            }
         case "debug-lock":
             // Plays the lock, then the unlock, without locking the Mac.
             env.lock.debugSimulate(seconds: 3)

@@ -36,6 +36,21 @@ public enum DashboardButtonMode: String, Codable, CaseIterable, Sendable, Identi
     }
 }
 
+/// When the compact island is out from under the notch.
+public enum IslandVisibility: String, Codable, CaseIterable, Sendable, Identifiable {
+    /// Whenever something is live (music, a timer, a call…).
+    case always
+    /// Tucked under the notch until the pointer reaches the camera.
+    case onHover
+    public var id: String { rawValue }
+    public var displayName: String {
+        switch self {
+        case .always: "Always"
+        case .onHover: "When the pointer is at the camera"
+        }
+    }
+}
+
 /// What the island does while an app is full screen on its display.
 public enum FullScreenBehavior: String, Codable, CaseIterable, Sendable, Identifiable {
     /// Stay as usual.
@@ -219,6 +234,8 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     public var compactMaxWidth: Double = 0
     public var dashboardButton: DashboardButtonMode = .always
     public var fullScreen: FullScreenBehavior = .hideWhenIdle
+    /// Always out when something is live, or only while the pointer is at the camera.
+    public var visibility: IslandVisibility = .always
     /// On displays without a camera, draw the black virtual notch even when idle.
     public var virtualNotchWhenIdle: Bool = true
     /// The lock opening on the island when the Mac unlocks.
@@ -305,7 +322,7 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case material, compactStyle, maxActivities, priority, openOnHover, hoverDelayMs, collapseOnMouseLeave
         case glowFromArtwork, displays, showMenuBarIcon, modules
-        case openWidthScale, compactMaxWidth, dashboardButton, fullScreen, virtualNotchWhenIdle, lockIndicator, hotKey
+        case openWidthScale, compactMaxWidth, dashboardButton, fullScreen, visibility, virtualNotchWhenIdle, lockIndicator, hotKey
         case nowPlaying, backgroundApps, calendar, timers, battery, systemStats
         case shelf, downloads, devices, hud, weather, clipboard, shortcuts, privacy, dashboard
     }
@@ -336,6 +353,7 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         compactMaxWidth = v(.compactMaxWidth, d.compactMaxWidth)
         dashboardButton = v(.dashboardButton, d.dashboardButton)
         fullScreen = v(.fullScreen, d.fullScreen)
+        visibility = v(.visibility, d.visibility)
         virtualNotchWhenIdle = v(.virtualNotchWhenIdle, d.virtualNotchWhenIdle)
         lockIndicator = v(.lockIndicator, d.lockIndicator)
         hotKey = c.tolerant(.hotKey, d.hotKey)
