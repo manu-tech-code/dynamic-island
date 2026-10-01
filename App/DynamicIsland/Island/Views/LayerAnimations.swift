@@ -3,7 +3,8 @@ import QuartzCore
 import SwiftUI
 
 // Things that keep moving on the island, run by Core Animation in the render
-// server: the app does no work per frame. A SwiftUI animation or an SF Symbols
+// server: the app does no work per frame (the waveform following the music
+// only sets five bars' heights, 30 times a second). A SwiftUI animation or an SF Symbols
 // effect redraws the whole island every frame instead (its glass and the
 // bubbles' blur too), which kept the CPU near 40% while music played.
 
@@ -11,8 +12,10 @@ import SwiftUI
 /// a spinning record, and a quarter of what ProMotion would otherwise draw.
 private let motionFrameRate = CAFrameRateRange(minimum: 15, maximum: 30, preferred: 30)
 
-/// The playing waveform: bars that rise and fall out of step. Still when
-/// paused, with Reduce Motion, or where it can't be seen (`animates` off).
+/// The playing waveform. Its bars follow the music, bass on the left, treble
+/// on the right (Settings › Now Playing › Waveform follows the music); without
+/// that, or until the tap hears anything, they rise and fall on their own.
+/// Still when paused, with Reduce Motion, or where it can't be seen (`animates` off).
 struct Waveform: View {
     let playing: Bool
     let color: Color
@@ -22,9 +25,12 @@ struct Waveform: View {
     var animates = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.self) private var environment
+    @Environment(AppEnvironment.self) private var env
 
     var body: some View {
-        WaveformBars(moving: playing && animates && !reduceMotion, color: color.resolve(in: environment).cgColor, height: height)
+        let follows = env.settings.settings.nowPlaying.waveformFollowsAudio
+        WaveformBars(moving: playing && animates && !reduceMotion, color: color.resolve(in: environment).cgColor, height: height,
+                     levels: follows ? env.audioLevels : nil)
             .frame(width: WaveformBars.width(height: height), height: height)
             .opacity(playing ? 1 : 0.45)
             .accessibilityHidden(true)
@@ -35,8 +41,9 @@ private struct WaveformBars: NSViewRepresentable {
     let moving: Bool
     let color: CGColor
     let height: CGFloat
+    let levels: AudioLevelService?
 
-    /// Each bar's height (of the tallest) and how long it takes to fall.
+    /// Each bar's resting height (of the tallest) and, on their own, how long it takes to fall.
     static let profile: [CGFloat] = [0.45, 0.8, 1, 0.6, 0.85]
     static let periods: [CFTimeInterval] = [0.82, 0.68, 0.95, 0.74, 0.88]
     static func barWidth(_ h: CGFloat) -> CGFloat { max(2, h * 0.18) }
@@ -48,20 +55,31 @@ private struct WaveformBars: NSViewRepresentable {
     func makeNSView(context: Context) -> WaveformLayerView { WaveformLayerView() }
 
     func updateNSView(_ view: WaveformLayerView, context: Context) {
-        view.configure(moving: moving, color: color, height: height)
+        view.configure(moving: moving, color: color, height: height, levels: levels)
+    }
+
+    static func dismantleNSView(_ view: WaveformLayerView, coordinator: ()) {
+        view.configure(moving: false, color: .clear, height: 0, levels: nil)
     }
 }
 
 final class WaveformLayerView: NSView {
     private var bars: [CALayer] = []
-    private var moving = false
     private var barHeight: CGFloat = 0
+    private var moving = false
+    private var levels: AudioLevelService?
+    /// While following the music: the service listening, and a 30 fps tick reading it.
+    private var listening: AudioLevelService?
+    private var link: CADisplayLink?
+    /// The bars' own rise and fall is running.
+    private var onTheirOwn = false
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
         bars = WaveformBars.profile.map { _ in CALayer() }
         bars.forEach { layer?.addSublayer($0) }
+        rest()
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -69,7 +87,7 @@ final class WaveformLayerView: NSView {
     /// Clicks go to the island underneath.
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    func configure(moving: Bool, color: CGColor, height: CGFloat) {
+    func configure(moving: Bool, color: CGColor, height: CGFloat, levels: AudioLevelService?) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         bars.forEach { $0.backgroundColor = color }
@@ -78,9 +96,15 @@ final class WaveformLayerView: NSView {
             barHeight = height
             needsLayout = true
         }
-        guard moving != self.moving else { return }
+        guard moving != self.moving || levels !== self.levels else { return }
         self.moving = moving
-        moving ? start() : stop()
+        self.levels = levels
+        update()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        update()
     }
 
     override func layout() {
@@ -89,18 +113,64 @@ final class WaveformLayerView: NSView {
         CATransaction.setDisableActions(true)
         let w = WaveformBars.barWidth(barHeight), gap = WaveformBars.gap(barHeight)
         for (i, bar) in bars.enumerated() {
-            bar.bounds = CGRect(x: 0, y: 0, width: w, height: barHeight * WaveformBars.profile[i])
+            bar.bounds = CGRect(x: 0, y: 0, width: w, height: barHeight)
             bar.position = CGPoint(x: CGFloat(i) * (w + gap) + w / 2, y: bounds.midY)
             bar.cornerRadius = w / 2
         }
         CATransaction.commit()
     }
 
-    private func start() {
+    private func update() {
+        let follows = moving && levels != nil && window != nil
+        if follows, listening == nil, let levels {
+            levels.acquire()
+            listening = levels
+            let link = displayLink(target: self, selector: #selector(tick(_:)))
+            link.preferredFrameRateRange = motionFrameRate
+            link.add(to: .main, forMode: .common)
+            self.link = link
+        } else if !follows, let listening {
+            link?.invalidate()
+            link = nil
+            listening.release()
+            self.listening = nil
+        }
+        // On their own until the tap hears something (`tick` takes over), or when not following.
+        if moving, !onTheirOwn { riseAndFall() }
+        if !moving { stopOnTheirOwn(); rest() }
+    }
+
+    @objc private func tick(_ link: CADisplayLink) {
+        guard let listening else { return }
+        let heard = listening.levels.snapshot()
+        guard heard.hearing else {
+            if !onTheirOwn { riseAndFall() }
+            return
+        }
+        if onTheirOwn { stopOnTheirOwn() }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for (i, bar) in bars.enumerated() {
+            let level = CGFloat(i < heard.bands.count ? heard.bands[i] : 0)
+            bar.transform = CATransform3DMakeScale(1, 0.18 + 0.82 * level, 1)
+        }
+        CATransaction.commit()
+    }
+
+    /// The waveform's shape, still.
+    private func rest() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for (i, bar) in bars.enumerated() { bar.transform = CATransform3DMakeScale(1, WaveformBars.profile[i], 1) }
+        CATransaction.commit()
+    }
+
+    private func riseAndFall() {
+        rest()
         for (i, bar) in bars.enumerated() {
             let fall = CABasicAnimation(keyPath: "transform.scale.y")
-            fall.fromValue = 1
-            fall.toValue = 0.35
+            fall.fromValue = WaveformBars.profile[i]
+            fall.toValue = WaveformBars.profile[i] * 0.35
             fall.duration = WaveformBars.periods[i]
             fall.autoreverses = true
             fall.repeatCount = .infinity
@@ -109,10 +179,12 @@ final class WaveformLayerView: NSView {
             fall.preferredFrameRateRange = motionFrameRate
             bar.add(fall, forKey: "wave")
         }
+        onTheirOwn = true
     }
 
-    private func stop() {
+    private func stopOnTheirOwn() {
         bars.forEach { $0.removeAnimation(forKey: "wave") }
+        onTheirOwn = false
     }
 }
 

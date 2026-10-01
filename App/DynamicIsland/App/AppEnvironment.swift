@@ -14,6 +14,7 @@ final class AppEnvironment {
     let calendar: CalendarService
     let backgroundApps: BackgroundAppsService
     let audioOutput: AudioOutputService
+    let audioLevels: AudioLevelService
     let lyrics: LyricsService
     let systemStats: SystemStatsService
     let shelf: ShelfService
@@ -42,6 +43,7 @@ final class AppEnvironment {
         calendar = CalendarService(settings: settings, engine: engine)
         backgroundApps = BackgroundAppsService(settings: settings)
         audioOutput = AudioOutputService()
+        audioLevels = AudioLevelService()
         lyrics = LyricsService(settings: settings)
         systemStats = SystemStatsService(settings: settings)
         shelf = ShelfService()

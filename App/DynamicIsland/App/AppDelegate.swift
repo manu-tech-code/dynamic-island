@@ -187,6 +187,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
             }
+        case "debug-audio":
+            // What the waveform hears: the tap, and the bars' latest heights.
+            Log.info("audio levels: \(env.audioLevels.debugDescription)")
         case "debug-layers":
             // The Core Animation views on screen: where they are, and whether they're moving.
             func walk(_ v: NSView, in w: NSWindow) {
