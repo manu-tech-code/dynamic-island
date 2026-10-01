@@ -56,8 +56,23 @@ final class IslandViewModel {
         case .expanded(let id) where engine.activity(id: id) != nil: return .expanded(activityID: id)
         case .dashboard: return .dashboard
         case .shelf: return .shelf
-        default: return ranked.isEmpty ? .idle : .compact
+        default: return ranked.isEmpty || concealed ? .idle : .compact
         }
+    }
+
+    /// Show the island › When the pointer is at the camera: the compact island
+    /// stays tucked under the notch until the pointer reaches the camera.
+    /// Alerts, HUDs and open states still show as usual.
+    var hidesUntilHover: Bool { settings.visibility == .onHover && !isPreview }
+    /// The pointer brought the island out (only matters while it hides until hover).
+    private(set) var revealed = false
+    private var concealed: Bool { hidesUntilHover && !revealed }
+
+    /// The island comes out from under the notch, or tucks back in.
+    func setRevealed(_ on: Bool) {
+        guard revealed != on else { return }
+        let animation: Animation = reduceMotion ? IslandMotion.reduced : on ? IslandMotion.open : IslandMotion.close
+        withAnimation(animation) { revealed = on }
     }
 
     /// A forced expanded state with no id shows whatever is primary.
@@ -291,7 +306,8 @@ final class IslandViewModel {
     func setHover(_ inside: Bool) {
         guard hover != inside else { return }
         withAnimation(reduceMotion ? nil : IslandMotion.hover) { hover = inside }
-        if inside, !isOpen, !reduceMotion { bounce += 1 }
+        // When the island hides until hover, coming out is the motion: no bounce on top.
+        if inside, !isOpen, !reduceMotion, !hidesUntilHover { bounce += 1 }
     }
 
     /// Should this point (in the island's coordinate space) show the title? Only
