@@ -16,8 +16,6 @@ ROOT="${0:A:h:h}"
 cd "$ROOT"
 DERIVED="$ROOT/build/DerivedData"
 VERSION=$(awk -F'"' '/CFBundleShortVersionString/ {print $2; exit}' project.yml)
-BUILD=$(awk -F'"' '/CFBundleVersion:/ {print $2; exit}' project.yml)
-REPO_URL="https://github.com/manu-tech-code/dynamic-island"
 UPLOAD=false
 [[ "${1:-}" == "--upload" ]] && UPLOAD=true
 
@@ -51,30 +49,9 @@ hdiutil create -volname "Dynamic Island $VERSION" -srcfolder "$STAGE" -ov -forma
 rm -rf "$STAGE"
 echo "built $DMG ($(du -h "$DMG" | cut -f1))"
 
-# Sparkle: the EdDSA signature of the .dmg, and an appcast describing this
-# release. Installed copies read it from the latest release on GitHub.
-SIGN_UPDATE="$DERIVED/SourcePackages/artifacts/sparkle/Sparkle/bin/sign_update"
-SIGNATURE=$("$SIGN_UPDATE" --account com.dynamicisland.mac "$DMG")   # sparkle:edSignature="…" length="…"
+# Sparkle: the signed appcast that installed copies read from the latest release.
+scripts/appcast.sh "$DMG"
 APPCAST="$ROOT/build/appcast.xml"
-cat > "$APPCAST" <<XML
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
-  <channel>
-    <title>Dynamic Island</title>
-    <link>$REPO_URL</link>
-    <item>
-      <title>Version $VERSION</title>
-      <pubDate>$(LC_ALL=C date -u "+%a, %d %b %Y %H:%M:%S +0000")</pubDate>
-      <sparkle:version>$BUILD</sparkle:version>
-      <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>$REPO_URL/releases/tag/v$VERSION</sparkle:releaseNotesLink>
-      <enclosure url="$REPO_URL/releases/download/v$VERSION/DynamicIsland-$VERSION.dmg" $SIGNATURE type="application/octet-stream"/>
-    </item>
-  </channel>
-</rss>
-XML
-echo "appcast $APPCAST (build $BUILD)"
 
 if $UPLOAD; then
   [[ "$(gh release view "v$VERSION" --json isDraft --jq .isDraft)" == "true" ]] \
