@@ -149,6 +149,9 @@ private struct GeneralPane: View {
                     Picker("Animation", selection: $store.settings.revealStyle) {
                         ForEach(RevealStyle.allCases) { Text($0.displayName).tag($0) }
                     }
+                    Picker("While music plays", selection: $store.settings.whilePlaying) {
+                        ForEach(PlayingStyle.allCases) { Text($0.displayName).tag($0) }
+                    }
                     RevealPreview()
                 }
                 Picker("When an app is full screen", selection: $store.settings.fullScreen) {
@@ -159,7 +162,7 @@ private struct GeneralPane: View {
             } header: {
                 Text("Where it shows")
             } footer: {
-                Text("“When the pointer is at the camera” keeps the island tucked under the notch until you point at the camera. “Unless something is live” keeps music, timers, calls and downloads visible over full-screen apps, and hides the rest. Alerts always show.")
+                Text("“When the pointer is at the camera” keeps the island tucked under the notch until you point at the camera; “While music plays” leaves a little of it out while a song plays, and pointing at that brings the island out too. “Unless something is live” keeps music, timers, calls and downloads visible over full-screen apps, and hides the rest. Alerts always show.")
             }
             Section("Controls") {
                 LabeledContent("Open or close the dashboard") { HotKeyRecorder() }
@@ -385,7 +388,7 @@ private struct DashboardPane: View {
                     Text("2 seconds").tag(2.0)
                     Text("5 seconds").tag(5.0)
                 }
-                Text("CPU, memory, storage and network are only measured while the dashboard is open.")
+                Text("CPU, GPU, memory, storage and network are only measured while the dashboard is open.")
                     .font(.callout).foregroundStyle(.secondary)
             }
             WeatherSettingsSection()
@@ -576,6 +579,13 @@ private struct ModulesPane: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Show the title when the pointer rests on the island")
                     Text("The song and artist appear under the compact island; long titles scroll.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Toggle(isOn: $store.settings.nowPlaying.titleOnTrackChange) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Show the title when the song changes")
+                    Text("The island opens for a moment with the new song and artist, then settles back.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }

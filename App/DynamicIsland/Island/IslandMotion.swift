@@ -65,6 +65,24 @@ enum IslandMotion {
     static func curtainTrailing(opening: Bool) -> Animation {
         opening ? .spring(duration: 0.6, bounce: 0.18).delay(0.11) : .spring(duration: 0.5, bounce: 0.02)
     }
+
+    // MARK: while music plays (the prototypes' timings)
+
+    /// A bubble or the drop pulled out of the notch, a beat after the island
+    /// has gone back past it, with a springy settle; the drop falls slower.
+    static func dropletOut(_ style: PlayingStyle) -> Animation {
+        style == .drip ? .spring(duration: 0.95, bounce: 0.5).delay(0.16) : .spring(duration: 0.7, bounce: 0.35).delay(0.14)
+    }
+    /// Back into the notch as the island comes out over it.
+    static let dropletIn = Animation.spring(duration: 0.45, bounce: 0)
+    /// The record rolling out from behind the notch.
+    static let recordOut = Animation.spring(duration: 0.8, bounce: 0.3).delay(0.12)
+    /// What's inside a bubble: in once the bubble is out, out at once.
+    static let indicatorContentIn = Animation.easeOut(duration: 0.22).delay(0.2)
+    static let indicatorContentOut = Animation.easeIn(duration: 0.1)
+    /// The underglow coming up once the island has tucked in, and going.
+    static let glowIn = Animation.easeOut(duration: 0.45).delay(0.2)
+    static let glowOut = Animation.easeIn(duration: 0.14)
 }
 
 /// Gives an animatable change its own animation when there is one, and leaves
