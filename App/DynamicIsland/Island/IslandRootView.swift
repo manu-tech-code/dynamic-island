@@ -69,6 +69,7 @@ struct IslandRootView: View {
                 .background(alignment: .top) { surfaceBackground(shape: shape, size: size) }
                 .modifier(GlassSurface(material: model.material, shape: shape))
                 .clipShape(shape)
+                .modifier(CurtainReveal(model: model))
                 .shadow(color: .black.opacity(model.material == .black ? 0.3 : 0), radius: 10, y: 4)
                 .contentShape(shape)
                 .onTapGesture { model.tap() }
@@ -204,6 +205,35 @@ private struct ResizeHandles: View {
             )
             .help("Drag to change the width")
             .accessibilityHidden(true)
+    }
+}
+
+/// Curtain: the island's two sides come out and tuck in on their own clocks,
+/// the left first. The shape's own frame follows the left side (the
+/// transaction); this mask holds the right side back, or closes it first.
+private struct CurtainReveal: ViewModifier {
+    let model: IslandViewModel
+
+    func body(content: Content) -> some View {
+        if model.revealStyle == .curtain, model.presentation == .compact {
+            let tucked = model.isTucked
+            let out = model.layoutSize.width / 2 + IslandMetrics.shoulder
+            let inside = IslandMetrics.idleSize(notch: model.notch.rect.size).width / 2 + IslandMetrics.shoulder
+            let r = model.radius
+            content.mask(alignment: .top) {
+                HStack(spacing: 0) {
+                    UnevenRoundedRectangle(bottomLeadingRadius: r, style: .continuous)
+                        .frame(width: tucked ? inside : out)
+                        .animation(IslandMotion.revealShape(.curtain, opening: !tucked), value: tucked)
+                    UnevenRoundedRectangle(bottomTrailingRadius: r, style: .continuous)
+                        .frame(width: tucked ? inside : out)
+                        .animation(IslandMotion.curtainTrailing(opening: !tucked), value: tucked)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        } else {
+            content
+        }
     }
 }
 

@@ -145,6 +145,12 @@ private struct GeneralPane: View {
                 Picker("Show the island", selection: $store.settings.visibility) {
                     ForEach(IslandVisibility.allCases) { Text($0.displayName).tag($0) }
                 }
+                if store.settings.visibility == .onHover {
+                    Picker("Animation", selection: $store.settings.revealStyle) {
+                        ForEach(RevealStyle.allCases) { Text($0.displayName).tag($0) }
+                    }
+                    RevealPreview()
+                }
                 Picker("When an app is full screen", selection: $store.settings.fullScreen) {
                     ForEach(FullScreenBehavior.allCases) { Text($0.displayName).tag($0) }
                 }
