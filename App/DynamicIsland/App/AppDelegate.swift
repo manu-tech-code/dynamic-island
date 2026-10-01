@@ -26,7 +26,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.info("launch · \(ProcessInfo.processInfo.operatingSystemVersionString) · \(Bundle.main.bundleURL.path)")
         let settingsWindow = SettingsWindowController(env: env)
         self.settingsWindow = settingsWindow
-        env.openSettings = { settingsWindow.show() }
+        // Opening Settings from anywhere (the dashboard's gear, Add Widgets…, a menu,
+        // a link) closes the island first, so it doesn't sit over the window.
+        env.openSettings = { [weak self] in
+            self?.islands?.collapseAll()
+            settingsWindow.show()
+        }
 
         env.start()
         islands = IslandManager(env: env)
