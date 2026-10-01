@@ -154,6 +154,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     Log.info("render \(name) \(Int(img.size.width))×\(Int(img.size.height)) outer \(model.outerSize)")
                 }
             }
+        case "debug-render-widget":
+            // dynamicisland://debug-render-widget?kind=cpu&size=medium — one dashboard card, offline, on black.
+            guard let kind = query["kind"].flatMap(DashboardWidgetKind.init(rawValue:)) else { break }
+            let size = query["size"].flatMap(WidgetSize.init(rawValue:)) ?? .small
+            let model = IslandViewModel(env: env, notch: NotchRect(rect: CGRect(x: 0, y: 0, width: 185, height: 32), isHardware: false))
+            let width = DashboardView.width(size)
+            let card = WidgetView(item: DashboardItem(kind, size), radius: 16, model: model)
+                .frame(width: width, height: DashboardLayout.cardHeight)
+                .padding(14).background(.black).environment(\.colorScheme, .dark).environment(env)
+            let r = ImageRenderer(content: card)
+            r.scale = 2
+            if let img = r.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+                try? rep.representation(using: .png, properties: [:])?.write(to: Log.fileURL.deletingLastPathComponent().appendingPathComponent("widget-\(kind.rawValue)-\(size.rawValue).png"))
+                Log.info("rendered widget \(kind.rawValue) \(size.rawValue) \(Int(width))×\(Int(DashboardLayout.cardHeight))")
+            }
         case "debug-visibility":
             // dynamicisland://debug-visibility?mode=onHover|always&style=slide&playing=bubble&reveal=1|0&announce=1
             if let mode = query["mode"].flatMap(IslandVisibility.init(rawValue:)) { env.settings.settings.visibility = mode }

@@ -388,7 +388,7 @@ private struct DashboardPane: View {
                     Text("2 seconds").tag(2.0)
                     Text("5 seconds").tag(5.0)
                 }
-                Text("CPU, memory, storage and network are only measured while the dashboard is open.")
+                Text("CPU, GPU, memory, storage and network are only measured while the dashboard is open.")
                     .font(.callout).foregroundStyle(.secondary)
             }
             WeatherSettingsSection()
