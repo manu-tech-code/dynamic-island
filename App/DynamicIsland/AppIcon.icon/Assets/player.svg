@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="art" x1="220" y1="370" x2="396" y2="546" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFB547"/>
+      <stop offset="1" stop-color="#FF3D8B"/>
+    </linearGradient>
+    <linearGradient id="artSheen" x1="0" y1="370" x2="0" y2="470" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="wave" x1="220" y1="0" x2="570" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7CFFB2"/>
+      <stop offset="1" stop-color="#16C7FF"/>
+    </linearGradient>
+  </defs>
+  <!-- artwork -->
+  <rect x="220" y="370" width="176" height="176" rx="44" fill="url(#art)"/>
+  <rect x="220" y="370" width="176" height="176" rx="44" fill="url(#artSheen)"/>
+  <!-- title and artist -->
+  <rect x="432" y="396" width="300" height="34" rx="17" fill="#FFFFFF"/>
+  <rect x="432" y="456" width="196" height="26" rx="13" fill="#FFFFFF" fill-opacity="0.45"/>
+  <!-- progress -->
+  <rect x="220" y="600" width="584" height="18" rx="9" fill="#FFFFFF" fill-opacity="0.18"/>
+  <rect x="220" y="600" width="350" height="18" rx="9" fill="url(#wave)"/>
+  <!-- previous, play, next -->
+  <rect x="392" y="664" width="16" height="68" rx="8" fill="#FFFFFF" fill-opacity="0.6"/>
+  <rect x="420" y="664" width="16" height="68" rx="8" fill="#FFFFFF" fill-opacity="0.6"/>
+  <path d="M486 660 L486 736 L550 698 Z" fill="#FFFFFF"/>
+  <rect x="600" y="664" width="16" height="68" rx="8" fill="#FFFFFF" fill-opacity="0.6"/>
+  <rect x="628" y="664" width="16" height="68" rx="8" fill="#FFFFFF" fill-opacity="0.6"/>
+</svg>

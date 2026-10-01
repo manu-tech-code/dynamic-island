@@ -81,7 +81,7 @@ targets:
       base:
         PRODUCT_NAME: DynamicIsland
         PRODUCT_BUNDLE_IDENTIFIER: com.dynamicisland.mac
-        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_USER_SCRIPT_SANDBOXING: YES
 
   NowPlayingBridge:

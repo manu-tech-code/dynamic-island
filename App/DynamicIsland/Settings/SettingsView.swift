@@ -785,7 +785,18 @@ private struct AboutPane: View {
     var body: some View {
         Form {
             Section {
-                LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—")
+                HStack(spacing: 14) {
+                    Image(nsImage: NSApp.applicationIconImage)
+                        .resizable()
+                        .frame(width: 64, height: 64)
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Dynamic Island").font(.title3.weight(.semibold))
+                        Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—")")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 4)
                 LabeledContent("Build", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—")
                 LabeledContent("macOS", value: ProcessInfo.processInfo.operatingSystemVersionString)
             }
