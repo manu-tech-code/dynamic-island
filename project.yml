@@ -12,6 +12,10 @@ options:
 packages:
   IslandKit:
     path: Packages/IslandKit
+  # Updates: checks the appcast on GitHub, verifies the EdDSA signature, installs.
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.10.0
 
 settings:
   base:
@@ -34,6 +38,7 @@ targets:
     dependencies:
       - package: IslandKit
         product: IslandCore
+      - package: Sparkle
       - target: NowPlayingBridge
         link: false
         embed: true
@@ -58,6 +63,14 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: com.dynamicisland.mac
             CFBundleURLSchemes: [dynamicisland]
+        # Sparkle: the appcast attached to the latest GitHub release, checked daily.
+        # Updates must be signed with the private key in the login Keychain
+        # (account com.dynamicisland.mac); this is its public half.
+        SUFeedURL: https://github.com/manu-tech-code/dynamic-island/releases/latest/download/appcast.xml
+        SUPublicEDKey: gn4eKuPKn8p+s/xn9/mJJ3vRAcb1uvIogEQczSSzNQs=
+        SUEnableAutomaticChecks: true
+        SUScheduledCheckInterval: 86400
+        SUVerifyUpdateBeforeExtraction: true
     entitlements:
       path: App/DynamicIsland/DynamicIsland.entitlements
       properties:

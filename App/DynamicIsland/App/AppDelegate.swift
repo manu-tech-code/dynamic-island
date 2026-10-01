@@ -79,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "dashboard": islands.toggleDashboard()
         case "collapse": islands.controllers.values.forEach { $0.model.collapse() }
         case "settings": env.openSettings()
+        case "check-for-updates": env.updates.checkForUpdates()
         case "timer":
             let minutes = Double(query["minutes"] ?? "") ?? 5
             env.timers.start(minutes: minutes, label: query["label"].flatMap { $0.isEmpty ? nil : $0 })
@@ -89,6 +90,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "next": env.nowPlaying.next()
         case "previous": env.nowPlaying.previous()
         #if DEBUG
+        case "debug-update-background":
+            // The daily check, now: a newer version should end up on the island.
+            env.updates.debugBackgroundCheck()
         case "debug-check":
             // Exercises lyrics and Up Next on whatever is loaded, even if paused.
             if let info = env.nowPlaying.info { env.lyrics.load(for: info) }

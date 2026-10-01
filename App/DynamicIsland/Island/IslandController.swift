@@ -316,6 +316,7 @@ final class IslandController: NSObject {
         }
         menu.addItem(material)
         menu.addItem(.separator())
+        add(menu, env.updates.available.map { "Install Update \($0)…" } ?? "Check for Updates…", #selector(menuUpdates))
         add(menu, "Settings…", #selector(menuSettings)).keyEquivalent = ","
         add(menu, "Quit Dynamic Island", #selector(menuQuit)).keyEquivalent = "q"
 
@@ -341,6 +342,7 @@ final class IslandController: NSObject {
     @objc private func menuToggle() { model.isOpen ? model.collapse() : model.openDashboard() }
     @objc private func menuPlayPause() { env.nowPlaying.togglePlayPause() }
     @objc private func menuShelf() { model.openShelf() }
+    @objc private func menuUpdates() { env.updates.checkForUpdates() }
     @objc private func menuWidth(_ item: NSMenuItem) {
         guard let scale = item.representedObject as? Double else { return }
         withAnimation(.spring(duration: 0.45, bounce: 0.15)) { env.settings.settings.openWidthScale = scale }

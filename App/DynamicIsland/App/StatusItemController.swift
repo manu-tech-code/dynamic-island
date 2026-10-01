@@ -23,6 +23,7 @@ final class StatusItemController: NSObject {
             menu.addItem(withTitle: "Open Dashboard", action: #selector(openDashboard), keyEquivalent: "i").keyEquivalentModifierMask = [.command, .option]
             menu.addItem(withTitle: "Open Shelf", action: #selector(openShelf), keyEquivalent: "")
             menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+            menu.addItem(withTitle: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
             menu.addItem(.separator())
             menu.addItem(withTitle: "Quit Dynamic Island", action: #selector(quit), keyEquivalent: "q")
             menu.items.forEach { $0.target = self }
@@ -37,5 +38,6 @@ final class StatusItemController: NSObject {
     @objc private func openDashboard() { islands.toggleDashboard() }
     @objc private func openSettings() { env.openSettings() }
     @objc private func openShelf() { islands.primary?.model.openShelf() }
+    @objc private func checkForUpdates() { env.updates.checkForUpdates() }
     @objc private func quit() { NSApp.terminate(nil) }
 }

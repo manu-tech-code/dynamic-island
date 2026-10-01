@@ -52,6 +52,7 @@ open "dynamicisland://dashboard"
 open "dynamicisland://timer?minutes=25&label=Focus"
 open "dynamicisland://play-pause"     # also: next, previous, collapse, settings
 open "dynamicisland://shelf"          # also: lyrics, up-next
+open "dynamicisland://check-for-updates"
 ```
 
 Log file: `~/Library/Logs/DynamicIsland/DynamicIsland.log`
