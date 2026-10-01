@@ -1,8 +1,10 @@
 import Darwin
 import Foundation
+import IOKit
+import IslandCore
 import Observation
 
-/// CPU, memory, storage and network for the dashboard. Samples only while
+/// CPU, GPU, memory, storage and network for the dashboard. Samples only while
 /// something on screen asks for it (`acquire`/`release`), so a closed
 /// dashboard costs nothing.
 @Observable
@@ -13,6 +15,12 @@ final class SystemStatsService {
 
     private(set) var cpu: Double = 0
     private(set) var cpuHistory: [Double] = []
+    /// GPU load, 0…1; nil until read, or where the GPU doesn't report it.
+    private(set) var gpu: Double?
+    private(set) var gpuHistory: [Double] = []
+    private(set) var gpuMemoryUsed: UInt64?
+    /// The GPU's cores, read once (Apple silicon reports them).
+    private(set) var gpuCores: Int?
     private(set) var memoryUsed: UInt64 = 0
     let memoryTotal = ProcessInfo.processInfo.physicalMemory
     private(set) var memoryPressure: Pressure = .normal
@@ -67,6 +75,12 @@ final class SystemStatsService {
             }
             lastTicks = t
         }
+        if let g = Self.gpuSample() {
+            gpu = g.sample.utilization
+            gpuMemoryUsed = g.sample.memoryInUse
+            if gpuCores == nil { gpuCores = g.cores }
+            push(&gpuHistory, g.sample.utilization)
+        }
         if let m = Self.memory() {
             memoryUsed = m.used
             memoryPressure = m.pressure
@@ -107,6 +121,24 @@ final class SystemStatsService {
         guard kr == KERN_SUCCESS else { return nil }
         let user = UInt64(info.cpu_ticks.0), system = UInt64(info.cpu_ticks.1), idle = UInt64(info.cpu_ticks.2), nice = UInt64(info.cpu_ticks.3)
         return (user + system + nice, user + system + idle + nice)
+    }
+
+    /// The first GPU that reports its load, from the I/O Registry (no admin rights needed).
+    private static func gpuSample() -> (sample: GPUSample, cores: Int?)? {
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOAccelerator"), &iterator) == KERN_SUCCESS else { return nil }
+        defer { IOObjectRelease(iterator) }
+        var service = IOIteratorNext(iterator)
+        while service != 0 {
+            defer { IOObjectRelease(service); service = IOIteratorNext(iterator) }
+            guard let stats = IORegistryEntryCreateCFProperty(service, "PerformanceStatistics" as CFString, kCFAllocatorDefault, 0)?
+                    .takeRetainedValue() as? [String: Any],
+                  let sample = GPUSample(performanceStatistics: stats) else { continue }
+            let cores = IORegistryEntryCreateCFProperty(service, "gpu-core-count" as CFString, kCFAllocatorDefault, 0)?
+                .takeRetainedValue() as? NSNumber
+            return (sample, cores?.intValue)
+        }
+        return nil
     }
 
     /// "Memory Used" the way Activity Monitor counts it: app + wired + compressed.

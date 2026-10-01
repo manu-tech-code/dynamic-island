@@ -277,16 +277,54 @@ private struct BatteryWidget: View {
     }
 }
 
+/// The processor and the graphics: both readings side by side with a colour
+/// key, over one graph where their lines share a scale. Over 80% turns red.
 private struct CPUWidget: View {
     let size: WidgetSize
     @Environment(AppEnvironment.self) private var env
 
     var body: some View {
         let stats = env.systemStats
-        StatValue(value: "\(Int((stats.cpu * 100).rounded()))%", detail: "\(ProcessInfo.processInfo.activeProcessorCount) cores")
+        let cpuColor: Color = stats.cpu > 0.8 ? .red : .blue
+        let gpuColor: Color = (stats.gpu ?? 0) > 0.8 ? .red : .purple
+        HStack(alignment: .top, spacing: size == .medium ? 28 : 18) {
+            reading(stats.cpu, label: "CPU", key: .blue)
+            if let gpu = stats.gpu { reading(gpu, label: "GPU", key: .purple) }
+            if size == .medium {
+                Spacer(minLength: 0)
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text("\(ProcessInfo.processInfo.activeProcessorCount)-core CPU")
+                    if let cores = stats.gpuCores {
+                        Text("\(cores)-core GPU" + (stats.gpuMemoryUsed.map { " · \(ByteFormat.memory($0))" } ?? ""))
+                    }
+                }
+                .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+            }
+        }
+        .accessibilityElement(children: .combine)
         Spacer(minLength: 4)
-        Sparkline(values: stats.cpuHistory, maxValue: 1, color: stats.cpu > 0.8 ? .red : .blue)
-            .frame(height: size == .medium ? 56 : 40)
+        ZStack {
+            Sparkline(values: stats.cpuHistory, maxValue: 1, color: cpuColor, fill: stats.gpu == nil)
+            if stats.gpu != nil {
+                Sparkline(values: stats.gpuHistory, maxValue: 1, color: gpuColor, baseline: false)
+            }
+        }
+        .frame(height: size == .medium ? 54 : 50)
+    }
+
+    private func reading(_ value: Double, label: String, key: Color) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text("\(Int((value * 100).rounded()))%")
+                .font(.system(size: 19, weight: .semibold, design: .rounded)).monospacedDigit()
+                .foregroundStyle(value > 0.8 ? .red : .primary)
+                .contentTransition(.numericText())
+                .lineLimit(1).fixedSize()
+            HStack(spacing: 4) {
+                Circle().fill(key).frame(width: 6, height: 6)
+                Text(label)
+            }
+            .font(.system(size: 11)).foregroundStyle(.secondary)
+        }
     }
 }
 
@@ -380,6 +418,8 @@ struct Sparkline: View {
     var maxValue: Double = 1
     let color: Color
     var fill = true
+    /// Off for a second line drawn over another graph, which has one already.
+    var baseline = true
 
     var body: some View {
         GeometryReader { g in
@@ -387,11 +427,13 @@ struct Sparkline: View {
             ZStack {
                 // A faint baseline across the full width, so a history that is
                 // still filling in doesn't look cut off.
-                Path { p in
-                    p.move(to: CGPoint(x: 0, y: g.size.height - 0.5))
-                    p.addLine(to: CGPoint(x: g.size.width, y: g.size.height - 0.5))
+                if baseline {
+                    Path { p in
+                        p.move(to: CGPoint(x: 0, y: g.size.height - 0.5))
+                        p.addLine(to: CGPoint(x: g.size.width, y: g.size.height - 0.5))
+                    }
+                    .stroke(color.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [2, 3]))
                 }
-                .stroke(color.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [2, 3]))
                 if fill, pts.count > 1 {
                     Path { p in
                         p.move(to: CGPoint(x: pts[0].x, y: g.size.height))
