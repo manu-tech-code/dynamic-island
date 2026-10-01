@@ -60,6 +60,8 @@ final class IslandController: NSObject {
     private var leaveTask: Task<Void, Never>?
     private var revealTask: Task<Void, Never>?
     private var concealTask: Task<Void, Never>?
+    /// The song last seen, so a new one can show its title.
+    private var lastTrack: String?
     private var scrollAccumulated: CGFloat = 0
     private var scrollHandled = false
 
@@ -108,9 +110,22 @@ final class IslandController: NSObject {
         whenChanged({ [model] in "\(model.contentKey) \(Int(model.outerSize.width))×\(Int(model.outerSize.height))" }) { [displayID] in
             Log.info("island \(displayID): \($0)")
         }
+        // A new song shows its title for a moment (not the first one seen, at launch).
+        lastTrack = Self.trackKey(env.nowPlaying.info)
+        whenChanged({ [env] in Self.trackKey(env.nowPlaying.info) }) { [weak self] track in
+            guard let self else { return }
+            defer { self.lastTrack = track }
+            guard self.lastTrack != nil, track != nil, self.env.nowPlaying.info?.isPlaying == true else { return }
+            self.model.announceTrack()
+        }
         // Locked: the lock island takes the island's place until the unlock animation is over.
         lockIsland.onFinished = { [weak self] in self?.setIslandVisible(true) }
         whenChanged({ [env] in env.lock.isLocked }) { [weak self] locked in self?.setLocked(locked) }
+    }
+
+    private static func trackKey(_ info: NowPlayingInfo?) -> String? {
+        guard let info, !info.title.isEmpty else { return nil }
+        return info.title + "\n" + info.artist
     }
 
     static func notch(for screen: NSScreen) -> NotchRect {
@@ -206,18 +221,19 @@ final class IslandController: NSObject {
     /// island out (so a pass across the menu bar doesn't), and leaving the island
     /// tucks it back in a moment later. Open states stay until they close.
     private func updateReveal(at p: NSPoint) {
-        let atCamera = IslandMetrics.revealArea(notch: model.notch.rect).contains(p)
-        if atCamera || (model.revealed && contains(p)) {
+        let atCamera = isAtCamera(p)
+        // The island out for a new song's title: the pointer on it keeps it out.
+        let onIsland = (model.revealed || model.announcing) && contains(p)
+        if atCamera || onIsland {
             concealTask?.cancel()
             concealTask = nil
+            if onIsland, !model.revealed { model.setRevealed(true) }
             guard atCamera, !model.revealed, revealTask == nil else { return }
             revealTask = Task { [weak self] in
                 try? await Task.sleep(for: .milliseconds(90))
                 guard let self, !Task.isCancelled else { return }
                 self.revealTask = nil
-                if IslandMetrics.revealArea(notch: self.model.notch.rect).contains(NSEvent.mouseLocation) {
-                    self.model.setRevealed(true)
-                }
+                if self.isAtCamera(NSEvent.mouseLocation) { self.model.setRevealed(true) }
             }
         } else {
             revealTask?.cancel()
@@ -230,6 +246,14 @@ final class IslandController: NSObject {
                 if !self.contains(NSEvent.mouseLocation), !self.model.isOpen { self.model.setRevealed(false) }
             }
         }
+    }
+
+    /// The camera, or what stays out of the tucked island while music plays.
+    private func isAtCamera(_ p: NSPoint) -> Bool {
+        if IslandMetrics.revealArea(notch: model.notch.rect).contains(p) { return true }
+        guard model.indicatorPhase == .shown, let style = model.playingIndicatorStyle,
+              let area = IslandMetrics.playingHoverArea(style: style, notch: model.notch.rect) else { return false }
+        return area.contains(p)
     }
 
     /// A click anywhere outside the island closes it.
