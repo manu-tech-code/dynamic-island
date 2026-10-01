@@ -19,11 +19,24 @@ feat/… fix/… bug/… chore/…  ──PR──▶  develop  ──PR──�
 4. **The Release workflow** then creates `release/<version>`, the tag `v<version>` and a
    *draft* GitHub release. Its notes list the merged PRs under Features, Fixes and
    Chores, from the label each PR gets from its branch name.
-5. **Attach the signed DMG and publish** from your Mac (published releases are
-   immutable, so the DMG has to go on while it's a draft):
+5. **Attach the signed DMG and the appcast, and publish** from your Mac (published
+   releases are immutable, so they have to go on while it's a draft):
    ```sh
    git fetch && git switch release/<version>
    scripts/release.sh --upload
    ```
+   Installed copies read `appcast.xml` from the latest release once a day (Sparkle)
+   and offer the update on the island.
+
+## The update key
+
+Updates are signed with an EdDSA key in your login Keychain (account
+`com.dynamicisland.mac`); `SUPublicEDKey` in `project.yml` is its public half.
+Without the private key, installed copies can't be updated, so keep a backup
+somewhere safe, outside the repo:
+
+```sh
+build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys --account com.dynamicisland.mac -x ~/dynamic-island-update-key
+```
 
 Nobody can push directly to `main` or `develop`, force-push them or delete them.

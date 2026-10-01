@@ -79,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "dashboard": islands.toggleDashboard()
         case "collapse": islands.controllers.values.forEach { $0.model.collapse() }
         case "settings": env.openSettings()
+        case "check-for-updates": env.updates.checkForUpdates()
         case "timer":
             let minutes = Double(query["minutes"] ?? "") ?? 5
             env.timers.start(minutes: minutes, label: query["label"].flatMap { $0.isEmpty ? nil : $0 })
@@ -89,6 +90,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "next": env.nowPlaying.next()
         case "previous": env.nowPlaying.previous()
         #if DEBUG
+        case "debug-update-background":
+            // The daily check, now: a newer version should end up on the island.
+            env.updates.debugBackgroundCheck()
         case "debug-check":
             // Exercises lyrics and Up Next on whatever is loaded, even if paused.
             if let info = env.nowPlaying.info { env.lyrics.load(for: info) }
@@ -118,6 +122,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     Log.info("render \(name) \(Int(img.size.width))×\(Int(img.size.height)) outer \(model.outerSize)")
                 }
             }
+        case "debug-lock":
+            // Plays the lock, then the unlock, without locking the Mac.
+            env.lock.debugSimulate(seconds: 3)
+        case "debug-render-alerts":
+            // Compact alerts in both styles, with a device's details open.
+            let pods = BluetoothDeviceInfo(id: "p", name: "Emmanuel’s AirPods Pro", kind: .airpodsPro,
+                                           batteryLeft: 82, batteryRight: 64, batteryCase: 45)
+            let styles: [(String, IslandAlert.Style, Bool)] = [
+                ("airpods", .deviceConnected(pods), false), ("airpods-hover", .deviceConnected(pods), true),
+                ("oraimo", .deviceConnected(BluetoothDeviceInfo(id: "o", name: "oraimo SpaceBuds", kind: .earbuds,
+                                                                 batteryLeft: 70, batteryRight: 18)), true),
+                ("charger", .chargerConnected(percent: 100), false), ("low", .lowBattery(percent: 9), false),
+                ("disconnected", .deviceDisconnected(name: "AirPods Pro", kind: .airpodsPro), false)]
+            let saved = env.settings.settings.compactStyle
+            for style in CompactStyle.allCases {
+                env.settings.settings.compactStyle = style
+                for (name, alertStyle, hover) in styles {
+                    let model = IslandViewModel(env: env, notch: NotchRect(rect: CGRect(x: 0, y: 0, width: 185, height: 32), isHardware: false))
+                    model.debugPresentation = .alert(IslandAlert(kind: .devices, style: alertStyle))
+                    model.debugPeek(hover: hover, peek: hover)
+                    let r = ImageRenderer(content: PreviewCanvas(model: model, availableWidth: 760).environment(env))
+                    r.scale = 2
+                    if let img = r.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+                        let file = "alert-\(style.rawValue)-\(name).png"
+                        try? rep.representation(using: .png, properties: [:])?.write(to: Log.fileURL.deletingLastPathComponent().appendingPathComponent(file))
+                        Log.info("render \(file) outer \(model.outerSize)")
+                    }
+                }
+            }
+            env.settings.settings.compactStyle = saved
         case "debug-media-rects":
             // Where each island thinks the playing track is, next to the island's own outline.
             for (id, c) in islands.controllers {

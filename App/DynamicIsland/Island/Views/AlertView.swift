@@ -9,6 +9,8 @@ struct AlertView: View {
     var body: some View {
         if alert.isHUD {
             HUDView(style: alert.style, model: model)
+        } else if alert.isCompact {
+            CompactAlertView(alert: alert, model: model)
         } else {
             VStack(spacing: 0) {
                 Color.clear.frame(height: model.notch.rect.height)
@@ -56,6 +58,14 @@ struct AlertView: View {
             titles(title, subtitle)
             Spacer()
             DashboardButton(model: model, size: 28)
+        case .updateAvailable(let version):
+            symbol("arrow.down.circle.fill", Color.accentColor)
+            titles("Update available", "Dynamic Island \(version)")
+            Spacer()
+            IslandCapsuleButton(title: "Install", prominent: true) {
+                model.env.engine.dismissAlert()
+                model.env.updates.checkForUpdates()
+            }
         case .eventStarting(let e):
             symbol("calendar", Color(hex: e.calendarColorHex))
             titles(e.title, "Starting now")

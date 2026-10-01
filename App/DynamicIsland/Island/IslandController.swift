@@ -53,6 +53,7 @@ final class IslandController: NSObject {
     let model: IslandViewModel
     private let env: AppEnvironment
     private let panel: IslandPanel
+    private let lockIsland: LockScreenIsland
     private var screenTop: CGFloat = 0
     private var inside = false
     private var hoverOpenTask: Task<Void, Never>?
@@ -64,6 +65,7 @@ final class IslandController: NSObject {
         self.displayID = displayID
         self.env = env
         model = IslandViewModel(env: env, notch: Self.notch(for: screen))
+        lockIsland = LockScreenIsland(notch: model.notch)
         panel = IslandPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         super.init()
         panel.isFloatingPanel = true
@@ -99,6 +101,9 @@ final class IslandController: NSObject {
         whenChanged({ [model] in "\(model.contentKey) \(Int(model.outerSize.width))×\(Int(model.outerSize.height))" }) { [displayID] in
             Log.info("island \(displayID): \($0)")
         }
+        // Locked: the lock island takes the island's place until the unlock animation is over.
+        lockIsland.onFinished = { [weak self] in self?.setIslandVisible(true) }
+        whenChanged({ [env] in env.lock.isLocked }) { [weak self] locked in self?.setLocked(locked) }
     }
 
     static func notch(for screen: NSScreen) -> NotchRect {
@@ -112,6 +117,7 @@ final class IslandController: NSObject {
         screenTop = screen.frame.maxY
         let size = Self.panelSize
         panel.setFrame(CGRect(x: notch.rect.midX - size.width / 2, y: screenTop - size.height, width: size.width, height: size.height), display: true)
+        lockIsland.update(notch: notch, screenTop: screenTop)
         // Re-assert: these flags can be dropped when a window is reordered.
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         Log.info("island on display \(displayID): notch \(notch.rect) hardware=\(notch.isHardware)")
@@ -120,7 +126,35 @@ final class IslandController: NSObject {
     func close() {
         hoverOpenTask?.cancel()
         leaveTask?.cancel()
+        lockIsland.close()
         panel.orderOut(nil)
+    }
+
+    // MARK: lock
+
+    private func setLocked(_ locked: Bool) {
+        if locked {
+            hoverOpenTask?.cancel()
+            leaveTask?.cancel()
+            model.collapse()
+            panel.ignoresMouseEvents = true
+            guard model.settings.lockIndicator else { return }
+            setIslandVisible(false)
+            lockIsland.setLocked(true, reduceMotion: model.reduceMotion)
+        } else if lockIsland.isShowing {
+            lockIsland.setLocked(false, reduceMotion: model.reduceMotion)
+        } else {
+            setIslandVisible(true)
+        }
+    }
+
+    /// Hidden while the lock shows; fades back in after the lock has gone into the notch.
+    private func setIslandVisible(_ visible: Bool) {
+        guard visible else { panel.alphaValue = 0; return }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.3
+            panel.animator().alphaValue = 1
+        }
     }
 
     /// Current island outline in global screen coordinates.
@@ -134,11 +168,12 @@ final class IslandController: NSObject {
     // MARK: pointer
 
     func pointerMoved(to p: NSPoint) {
+        guard !env.lock.isLocked else { return }
         let now = contains(p)
         if panel.ignoresMouseEvents == now { panel.ignoresMouseEvents = !now }
         // The title drops down only while the pointer is on the track itself.
         let f = panel.frame
-        model.setOverMedia(now && model.presentation == .compact && model.isOverMedia(CGPoint(x: p.x - f.minX, y: f.maxY - p.y)))
+        model.setOverMedia(now && model.allowsPeek && model.isOverMedia(CGPoint(x: p.x - f.minX, y: f.maxY - p.y)))
         guard now != inside else { return }
         inside = now
         model.setHover(now)
@@ -178,6 +213,7 @@ final class IslandController: NSObject {
     /// it and Tab moves between controls; it closes again if the pointer
     /// never comes over.
     func toggleDashboard() {
+        guard !env.lock.isLocked else { return }
         model.toggleDashboard()
         if model.isOpen {
             if hiddenForFullScreen { panel.orderFrontRegardless() }
@@ -275,6 +311,7 @@ final class IslandController: NSObject {
     // MARK: menu
 
     func showMenu() {
+        guard !env.lock.isLocked else { return }
         let menu = NSMenu()
         menu.autoenablesItems = false
         add(menu, model.isOpen ? "Collapse" : "Open Dashboard", #selector(menuToggle))
@@ -316,6 +353,7 @@ final class IslandController: NSObject {
         }
         menu.addItem(material)
         menu.addItem(.separator())
+        add(menu, env.updates.available.map { "Install Update \($0)…" } ?? "Check for Updates…", #selector(menuUpdates))
         add(menu, "Settings…", #selector(menuSettings)).keyEquivalent = ","
         add(menu, "Quit Dynamic Island", #selector(menuQuit)).keyEquivalent = "q"
 
@@ -341,6 +379,7 @@ final class IslandController: NSObject {
     @objc private func menuToggle() { model.isOpen ? model.collapse() : model.openDashboard() }
     @objc private func menuPlayPause() { env.nowPlaying.togglePlayPause() }
     @objc private func menuShelf() { model.openShelf() }
+    @objc private func menuUpdates() { env.updates.checkForUpdates() }
     @objc private func menuWidth(_ item: NSMenuItem) {
         guard let scale = item.representedObject as? Double else { return }
         withAnimation(.spring(duration: 0.45, bounce: 0.15)) { env.settings.settings.openWidthScale = scale }
