@@ -74,9 +74,12 @@ final class IslandViewModel {
     /// The island comes out from under the notch, or tucks back in.
     func setRevealed(_ on: Bool) {
         guard revealed != on else { return }
-        let animation: Animation = reduceMotion ? IslandMotion.reduced : on ? IslandMotion.open : IslandMotion.close
+        let animation = reduceMotion ? IslandMotion.reduced : IslandMotion.revealShape(settings.revealStyle, opening: on)
         withAnimation(animation) { revealed = on }
     }
+
+    /// The reveal style in effect (Reduce Motion keeps everything to one fade).
+    var revealStyle: RevealStyle? { hidesUntilHover && !reduceMotion ? settings.revealStyle : nil }
 
     /// A forced expanded state with no id shows whatever is primary.
     private func resolvedForced(_ p: IslandPresentation) -> IslandPresentation {

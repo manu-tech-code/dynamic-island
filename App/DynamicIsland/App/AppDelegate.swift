@@ -125,9 +125,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "debug-visibility":
             // dynamicisland://debug-visibility?mode=onHover|always&reveal=1|0
             if let mode = query["mode"].flatMap(IslandVisibility.init(rawValue:)) { env.settings.settings.visibility = mode }
+            if let style = query["style"].flatMap(RevealStyle.init(rawValue:)) { env.settings.settings.revealStyle = style }
             if let reveal = query["reveal"] { islands.controllers.values.forEach { $0.model.setRevealed(reveal == "1") } }
             for c in islands.controllers.values {
-                Log.info("visibility \(c.model.settings.visibility.rawValue), revealed \(c.model.revealed), tucked \(c.model.isTucked): \(c.model.contentKey) \(Int(c.model.outerSize.width))×\(Int(c.model.outerSize.height))")
+                Log.info("visibility \(c.model.settings.visibility.rawValue)/\(c.model.settings.revealStyle.rawValue), revealed \(c.model.revealed), tucked \(c.model.isTucked): \(c.model.contentKey) \(Int(c.model.outerSize.width))×\(Int(c.model.outerSize.height))")
                 if let name = query["render"] {
                     // The live island, drawn offline over the wallpaper (glass shows as a placeholder).
                     let r = ImageRenderer(content: PreviewCanvas(model: c.model, availableWidth: 760).environment(env))

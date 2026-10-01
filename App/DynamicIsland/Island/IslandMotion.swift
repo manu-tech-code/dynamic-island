@@ -1,3 +1,4 @@
+import IslandCore
 import SwiftUI
 
 /// Every timing the island's shape and content move with, in one place so
@@ -32,4 +33,47 @@ enum IslandMotion {
 
     /// With Reduce Motion: a plain short fade instead of any spring.
     static let reduced = Animation.easeInOut(duration: 0.25)
+
+    // MARK: hover to show (the prototypes' timings)
+
+    /// The shape coming out from under the notch, or tucking back in.
+    static func revealShape(_ style: RevealStyle, opening: Bool) -> Animation {
+        switch (style, opening) {
+        case (.slide, true): .spring(duration: 0.62, bounce: 0.2)
+        case (.slide, false): .spring(duration: 0.55, bounce: 0.02)
+        case (.ink, true): .spring(duration: 0.6, bounce: 0.15)
+        case (.ink, false): .spring(duration: 0.5, bounce: 0).delay(0.07)   // after the content has gone
+        case (.elastic, true): .spring(duration: 0.7, bounce: 0.42)
+        case (.elastic, false): .spring(duration: 0.45, bounce: 0)
+        case (.curtain, true): .spring(duration: 0.6, bounce: 0.18)         // the left side, first
+        case (.curtain, false): .spring(duration: 0.5, bounce: 0.02).delay(0.08) // the left side, last
+        }
+    }
+
+    /// The content's own motion, for styles where it doesn't just ride the edges.
+    static func revealContent(_ style: RevealStyle, opening: Bool) -> Animation? {
+        switch (style, opening) {
+        case (.ink, true): .easeOut(duration: 0.28).delay(0.12)   // once the edges have passed it
+        case (.ink, false): .easeIn(duration: 0.12)
+        case (.elastic, true): .spring(duration: 0.6, bounce: 0.35).delay(0.04)
+        case (.elastic, false): .spring(duration: 0.45, bounce: 0)
+        case (.slide, _), (.curtain, _): nil
+        }
+    }
+
+    /// The curtain's right side: out 110 ms after the left, in 80 ms before it.
+    static func curtainTrailing(opening: Bool) -> Animation {
+        opening ? .spring(duration: 0.6, bounce: 0.18).delay(0.11) : .spring(duration: 0.5, bounce: 0.02)
+    }
+}
+
+/// Gives an animatable change its own animation when there is one, and leaves
+/// it to the surrounding transaction otherwise (`.animation(nil)` would stop it).
+struct OptionalAnimation<V: Equatable>: ViewModifier {
+    let animation: Animation?
+    let value: V
+
+    func body(content: Content) -> some View {
+        if let animation { content.animation(animation, value: value) } else { content }
+    }
 }

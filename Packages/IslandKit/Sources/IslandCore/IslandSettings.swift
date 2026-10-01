@@ -51,6 +51,27 @@ public enum IslandVisibility: String, Codable, CaseIterable, Sendable, Identifia
     }
 }
 
+/// How a hidden island comes out from under the notch and tucks back in.
+public enum RevealStyle: String, Codable, CaseIterable, Sendable, Identifiable {
+    /// The ears slide out from under the camera, content riding the edges.
+    case slide
+    /// The edges spread first; the content fades and sharpens in once they've passed.
+    case ink
+    /// A springier stretch past full size, with the content popping up from small.
+    case elastic
+    /// The left ear opens a beat before the right, and closes after it.
+    case curtain
+    public var id: String { rawValue }
+    public var displayName: String {
+        switch self {
+        case .slide: "Slide under the notch"
+        case .ink: "Ink spread"
+        case .elastic: "Elastic pop"
+        case .curtain: "Curtain"
+        }
+    }
+}
+
 /// What the island does while an app is full screen on its display.
 public enum FullScreenBehavior: String, Codable, CaseIterable, Sendable, Identifiable {
     /// Stay as usual.
@@ -236,6 +257,8 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     public var fullScreen: FullScreenBehavior = .hideWhenIdle
     /// Always out when something is live, or only while the pointer is at the camera.
     public var visibility: IslandVisibility = .always
+    /// How the island comes out and tucks back in, when it hides until hover.
+    public var revealStyle: RevealStyle = .slide
     /// On displays without a camera, draw the black virtual notch even when idle.
     public var virtualNotchWhenIdle: Bool = true
     /// The lock opening on the island when the Mac unlocks.
@@ -322,7 +345,7 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case material, compactStyle, maxActivities, priority, openOnHover, hoverDelayMs, collapseOnMouseLeave
         case glowFromArtwork, displays, showMenuBarIcon, modules
-        case openWidthScale, compactMaxWidth, dashboardButton, fullScreen, visibility, virtualNotchWhenIdle, lockIndicator, hotKey
+        case openWidthScale, compactMaxWidth, dashboardButton, fullScreen, visibility, revealStyle, virtualNotchWhenIdle, lockIndicator, hotKey
         case nowPlaying, backgroundApps, calendar, timers, battery, systemStats
         case shelf, downloads, devices, hud, weather, clipboard, shortcuts, privacy, dashboard
     }
@@ -354,6 +377,7 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         dashboardButton = v(.dashboardButton, d.dashboardButton)
         fullScreen = v(.fullScreen, d.fullScreen)
         visibility = v(.visibility, d.visibility)
+        revealStyle = v(.revealStyle, d.revealStyle)
         virtualNotchWhenIdle = v(.virtualNotchWhenIdle, d.virtualNotchWhenIdle)
         lockIndicator = v(.lockIndicator, d.lockIndicator)
         hotKey = c.tolerant(.hotKey, d.hotKey)

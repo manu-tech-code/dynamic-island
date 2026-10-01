@@ -66,6 +66,7 @@ struct CompactView: View {
             .frame(width: inner, alignment: .leading)
             .padding(.leading, IslandMetrics.earOuterPadding)
             .padding(.trailing, IslandMetrics.earInnerGap)
+            .modifier(RevealContent(model: model, anchor: .leading))
             .offset(x: shift)
             Color.clear.frame(width: notchW)
             HStack(spacing: IslandMetrics.glyphSpacing) {
@@ -77,7 +78,11 @@ struct CompactView: View {
             .frame(width: inner, alignment: .trailing)
             .padding(.leading, IslandMetrics.earInnerGap)
             .padding(.trailing, IslandMetrics.earOuterPadding)
+            .modifier(RevealContent(model: model, anchor: .trailing))
             .offset(x: -shift)
+            // Curtain: the right ear follows the right side's own, later clock.
+            .modifier(OptionalAnimation(animation: model.revealStyle == .curtain
+                ? IslandMotion.curtainTrailing(opening: !model.isTucked) : nil, value: model.isTucked))
         }
         .frame(height: model.notch.rect.height)
         .padding(.horizontal, IslandMetrics.shoulder)
@@ -95,6 +100,7 @@ struct CompactView: View {
             }
             .padding(.horizontal, 14)
             .frame(height: IslandMetrics.belowBand - 2)
+            .modifier(RevealContent(model: model, anchor: .center))
             // Tucked: the band rides up into the notch as the island closes.
             .offset(y: model.isTucked ? -IslandMetrics.belowBand : 0)
             if let track = model.peekingTrack, !track.artist.isEmpty {
@@ -352,6 +358,24 @@ extension AnyTransition {
             insertion: .opacity.combined(with: .offset(y: -8)),
             removal: .opacity.animation(IslandMotion.peekRowOut)
         )
+    }
+}
+
+/// The content's part in a reveal: Ink spread fades and sharpens it in after
+/// the edges, Elastic pop springs it up from small; Slide and Curtain leave it
+/// riding the edges as it is.
+private struct RevealContent: ViewModifier {
+    let model: IslandViewModel
+    let anchor: UnitPoint
+
+    func body(content: Content) -> some View {
+        let tucked = model.isTucked
+        let style = model.revealStyle
+        content
+            .opacity(tucked && (style == .ink || style == .elastic) ? 0 : 1)
+            .blur(radius: tucked && style == .ink ? 4 : 0)
+            .scaleEffect(tucked ? (style == .ink ? 0.92 : style == .elastic ? 0.55 : 1) : 1, anchor: anchor)
+            .modifier(OptionalAnimation(animation: style.flatMap { IslandMotion.revealContent($0, opening: !tucked) }, value: tucked))
     }
 }
 
