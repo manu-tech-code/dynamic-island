@@ -69,7 +69,19 @@ final class IslandViewModel {
     /// Tucked under the notch: the compact island keeps its content laid out as
     /// usual, but its sides close in to the notch and each ear's content slides
     /// in with its edge, under the camera. Coming out runs the same motion back.
-    var isTucked: Bool { hidesUntilHover && !revealed && presentation == .compact }
+    var isTucked: Bool {
+        if let previewTuck { return previewTuck && presentation == .compact }
+        return hidesUntilHover && !revealed && presentation == .compact
+    }
+
+    /// The Settings preview of the reveal: tucked or out, played by the preview itself.
+    private(set) var previewTuck: Bool?
+
+    func setPreviewTuck(_ tucked: Bool) {
+        guard previewTuck != tucked else { return }
+        let animation = reduceMotion ? IslandMotion.reduced : IslandMotion.revealShape(settings.revealStyle, opening: !tucked)
+        withAnimation(animation) { previewTuck = tucked }
+    }
 
     /// The island comes out from under the notch, or tucks back in.
     func setRevealed(_ on: Bool) {
@@ -79,7 +91,10 @@ final class IslandViewModel {
     }
 
     /// The reveal style in effect (Reduce Motion keeps everything to one fade).
-    var revealStyle: RevealStyle? { hidesUntilHover && !reduceMotion ? settings.revealStyle : nil }
+    var revealStyle: RevealStyle? {
+        guard !reduceMotion, hidesUntilHover || previewTuck != nil else { return nil }
+        return settings.revealStyle
+    }
 
     /// A forced expanded state with no id shows whatever is primary.
     private func resolvedForced(_ p: IslandPresentation) -> IslandPresentation {

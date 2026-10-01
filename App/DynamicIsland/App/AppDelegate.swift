@@ -138,6 +138,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
             }
+        case "debug-reveal-preview":
+            // The Settings reveal preview's island, out and tucked, rendered offline.
+            let m = IslandViewModel(env: env, notch: NotchRect(rect: CGRect(x: 0, y: 0, width: 185, height: 32), isHardware: false))
+            m.forced = .compact
+            for (name, tucked) in [("out", false), ("tucked", true)] {
+                m.setPreviewTuck(tucked)
+                let r = ImageRenderer(content: PreviewCanvas(model: m, availableWidth: 760, height: 96).environment(env))
+                r.scale = 2
+                if let img = r.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+                    try? rep.representation(using: .png, properties: [:])?.write(to: Log.fileURL.deletingLastPathComponent().appendingPathComponent("reveal-preview-\(name).png"))
+                    Log.info("reveal preview \(name): tucked \(m.isTucked) \(m.contentKey) \(Int(m.outerSize.width))×\(Int(m.outerSize.height)) style \(m.revealStyle?.rawValue ?? "-")")
+                }
+            }
         case "debug-lock":
             // Plays the lock, then the unlock, without locking the Mac.
             env.lock.debugSimulate(seconds: 3)
