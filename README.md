@@ -3,6 +3,25 @@
 A configurable Dynamic Island around the MacBook notch, drawn with the system's
 own Liquid Glass so it follows your appearance settings.
 
+## Install
+
+Needs a Mac with Apple silicon (M1 or later) and macOS 26 or later. Paste this
+into Terminal:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/manu-tech-code/dynamic-island/HEAD/scripts/install.sh | bash
+```
+
+It downloads the latest release, checks the app is signed by this project's
+certificate, installs it in Applications and opens it. Run it again any time to
+reinstall. After that, the app updates itself: new versions show on the island.
+
+**From the .dmg instead:** download it from
+[Releases](https://github.com/manu-tech-code/dynamic-island/releases/latest) and
+drag the app to Applications. The app isn't notarized by Apple, so the first time
+macOS says it can't be opened: click **Done**, then go to System Settings › Privacy &
+Security and click **Open Anyway** next to "Dynamic Island" was blocked.
+
 ## Build and run
 
 Requires macOS 26+, Xcode 26+ and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
