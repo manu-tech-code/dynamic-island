@@ -47,8 +47,8 @@ targets:
       path: App/DynamicIsland/Info.plist
       properties:
         CFBundleDisplayName: Dynamic Island
-        CFBundleShortVersionString: "0.7.0"
-        CFBundleVersion: "10"
+        CFBundleShortVersionString: "0.7.1"
+        CFBundleVersion: "11"
         LSApplicationCategoryType: public.app-category.productivity
         LSMinimumSystemVersion: "26.0"
         LSUIElement: true
