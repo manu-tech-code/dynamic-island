@@ -5,16 +5,17 @@ import Sparkle
 
 /// Updates through Sparkle. Once a day it reads the appcast attached to the
 /// latest GitHub release, checks the download's EdDSA signature against the
-/// key in Info.plist, and replaces the app on relaunch. As a menu bar app it
-/// uses Sparkle's gentle reminders: an update found in the background shows on
-/// the island instead of a window popping up over your work.
+/// key in Info.plist, and replaces the app on relaunch. Sparkle's window is
+/// replaced by ours (`UpdateDriver`): a timeline of releases with Update Now.
+/// An update found in the background shows on the island first.
 @Observable
 final class UpdateService: NSObject {
     /// A version found by a scheduled check, waiting for you.
     private(set) var available: String?
 
     @ObservationIgnored private let engine: ActivityEngine
-    @ObservationIgnored private var controller: SPUStandardUpdaterController?
+    @ObservationIgnored private let driver = UpdateDriver()
+    @ObservationIgnored private var updater: SPUUpdater?
 
     init(engine: ActivityEngine) {
         self.engine = engine
@@ -22,20 +23,36 @@ final class UpdateService: NSObject {
     }
 
     func start() {
-        guard controller == nil else { return }
-        controller = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: self)
+        guard updater == nil else { return }
+        driver.onBackgroundUpdate = { [weak self] version in
+            self?.available = version
+            Log.info("update available: \(version)")
+            self?.engine.post(IslandAlert(kind: .battery, style: .updateAvailable(version: version), holdSeconds: 8))
+        }
+        driver.onSessionEnd = { [weak self] in self?.available = nil }
+        let updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: driver, delegate: self)
+        do {
+            try updater.start()
+        } catch {
+            Log.error("updates: couldn't start (\(error.localizedDescription))")
+        }
+        self.updater = updater
         Log.info("updates: \(automaticallyChecks ? "checking daily" : "automatic checks off"), last \(lastChecked.map { "\($0)" } ?? "never")")
     }
 
     var automaticallyChecks: Bool {
-        get { controller?.updater.automaticallyChecksForUpdates ?? false }
-        set { controller?.updater.automaticallyChecksForUpdates = newValue }
+        get { updater?.automaticallyChecksForUpdates ?? false }
+        set { updater?.automaticallyChecksForUpdates = newValue }
     }
 
-    var lastChecked: Date? { controller?.updater.lastUpdateCheckDate }
+    var lastChecked: Date? { updater?.lastUpdateCheckDate }
 
-    /// Sparkle's window: the update with its notes and Install, or "you're up to date".
+    /// The update window: the waiting update, or a fresh check.
     func checkForUpdates() {
+        if driver.hasPendingUpdate {
+            driver.showPendingUpdate()
+            return
+        }
         #if DEBUG
         guard Self.debugFeed != nil else {
             engine.post(IslandAlert(kind: .battery, style: .message(
@@ -43,9 +60,7 @@ final class UpdateService: NSObject {
             return
         }
         #endif
-        available = nil
-        NSApp.activate()
-        controller?.checkForUpdates(nil)
+        updater?.checkForUpdates()
     }
 
     #if DEBUG
@@ -54,11 +69,16 @@ final class UpdateService: NSObject {
     /// `defaults write com.dynamicisland.mac DebugFeedURL file:///…/appcast.xml`.
     static var debugFeed: String? { UserDefaults.standard.string(forKey: "DebugFeedURL") }
 
-    func debugBackgroundCheck() { controller?.updater.checkForUpdatesInBackground() }
+    func debugBackgroundCheck() { updater?.checkForUpdatesInBackground() }
+
+    /// The update window in a given step, with real notes and nothing to install.
+    func debugWindow(_ phase: UpdateFlow.Phase, version: String) { driver.debugShow(phase, version: version) }
+    var debugFlow: UpdateFlow { driver.flow }
+    func debugPress(_ button: String) { driver.debugPress(button) }
     #endif
 }
 
-extension UpdateService: @preconcurrency SPUUpdaterDelegate {
+extension UpdateService: SPUUpdaterDelegate {
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
         Log.info("updates: found \(item.displayVersionString) (build \(item.versionString))")
     }
@@ -76,29 +96,4 @@ extension UpdateService: @preconcurrency SPUUpdaterDelegate {
     func feedURLString(for updater: SPUUpdater) -> String? { Self.debugFeed }
     func updaterMayCheck(forUpdates updater: SPUUpdater) -> Bool { Self.debugFeed != nil }
     #endif
-}
-
-extension UpdateService: @preconcurrency SPUStandardUserDriverDelegate {
-    var supportsGentleScheduledUpdateReminders: Bool { true }
-
-    /// Sparkle shows its window right away only when the app is in front
-    /// (just opened, say); otherwise the island tells you.
-    func standardUserDriverShouldHandleShowingScheduledUpdate(_ update: SUAppcastItem, andInImmediateFocus immediateFocus: Bool) -> Bool {
-        immediateFocus
-    }
-
-    func standardUserDriverWillHandleShowingUpdate(_ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem, state: SPUUserUpdateState) {
-        guard !handleShowingUpdate, !state.userInitiated else { return }
-        available = update.displayVersionString
-        Log.info("update available: \(update.displayVersionString)")
-        engine.post(IslandAlert(kind: .battery, style: .updateAvailable(version: update.displayVersionString), holdSeconds: 8))
-    }
-
-    func standardUserDriverDidReceiveUserAttention(forUpdate update: SUAppcastItem) {
-        available = nil
-    }
-
-    func standardUserDriverWillFinishUpdateSession() {
-        available = nil
-    }
 }
