@@ -71,7 +71,7 @@ final class IslandViewModel {
     /// in with its edge, under the camera. Coming out runs the same motion back.
     var isTucked: Bool {
         if let previewTuck { return previewTuck && presentation == .compact }
-        return hidesUntilHover && !revealed && presentation == .compact
+        return hidesUntilHover && !revealed && !announcing && presentation == .compact
     }
 
     /// The Settings preview of the reveal: tucked or out, played by the preview itself.
@@ -88,6 +88,58 @@ final class IslandViewModel {
         guard revealed != on else { return }
         let animation = reduceMotion ? IslandMotion.reduced : IslandMotion.revealShape(settings.revealStyle, opening: on)
         withAnimation(animation) { revealed = on }
+    }
+
+    // MARK: while music plays
+
+    /// Where what stays out of a tucked island is: out beside the notch, back
+    /// inside it while the island is out over that spot, or put away.
+    enum IndicatorPhase: Equatable { case hidden, shown, absorbed }
+
+    /// Settings › While music plays, when the island hides until hover.
+    var playingIndicatorStyle: PlayingStyle? {
+        guard hidesUntilHover || previewTuck != nil, settings.whilePlaying != .tucked else { return nil }
+        return settings.whilePlaying
+    }
+
+    var indicatorPhase: IndicatorPhase {
+        guard isPlayingMusic else { return .hidden }
+        return isTucked ? .shown : .absorbed
+    }
+
+    /// A song is playing on the compact island (a paused one stays tucked away).
+    var isPlayingMusic: Bool {
+        ranked.visible.contains { if case .nowPlaying(let info) = $0.payload { info.isPlaying } else { false } }
+    }
+
+    /// A new song is showing its title for a moment (Settings › Now Playing).
+    private(set) var announcing = false
+    @ObservationIgnored private var announceTask: Task<Void, Never>?
+
+    /// The song changed: its title shows under the island for a moment, the
+    /// island coming out from under the notch if it was tucked.
+    func announceTrack() {
+        guard settings.nowPlaying.titleOnTrackChange, !isPreview,
+              presentation == .compact else { return }
+        if !announcing {
+            let animation = reduceMotion ? IslandMotion.reduced
+                : isTucked ? IslandMotion.revealShape(settings.revealStyle, opening: true) : IslandMotion.peekOpen
+            withAnimation(animation) { announcing = true }
+        }
+        announceTask?.cancel()
+        announceTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2.6))
+            guard let self, !Task.isCancelled else { return }
+            self.endAnnouncement()
+        }
+    }
+
+    private func endAnnouncement() {
+        guard announcing else { return }
+        let tucks = hidesUntilHover && !revealed
+        let animation = reduceMotion ? IslandMotion.reduced
+            : tucks ? IslandMotion.revealShape(settings.revealStyle, opening: false) : IslandMotion.peekClose
+        withAnimation(animation) { announcing = false }
     }
 
     /// The reveal style in effect (Reduce Motion keeps everything to one fade).
@@ -161,7 +213,7 @@ final class IslandViewModel {
 
     /// The track playing on the compact island, while it shows its title under the ears.
     var peekingTrack: NowPlayingInfo? {
-        guard peek, !isPreview, !isTucked, settings.nowPlaying.titleOnHover, presentation == .compact,
+        guard peek && settings.nowPlaying.titleOnHover || announcing, !isPreview, !isTucked, presentation == .compact,
               case .nowPlaying(let info)? = compactFit.ranked.primary?.payload, !info.title.isEmpty else { return nil }
         return info
     }

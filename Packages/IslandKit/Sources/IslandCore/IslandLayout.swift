@@ -274,6 +274,46 @@ public enum IslandMetrics {
                width: notch.width + 2 * revealMargin, height: notch.height + 6)
     }
 
+    // MARK: while music plays (hover to show)
+
+    /// Settings › While music plays: the gap between the notch and a bubble.
+    public static let playingBubbleGap: CGFloat = 8
+    /// Each slim ear: the artwork or the waveform, with 8 pt on either side.
+    public static let playingSlimEar: CGFloat = 36
+    /// The drop hangs this far below the notch, and is this wide.
+    public static let playingDropGap: CGFloat = 6
+    public static let playingDropDiameter: CGFloat = 26
+    /// How much of the record shows past the notch.
+    public static let playingRecordPeek: CGFloat = 24
+    /// Bubbles are as tall as the notch, less a point at the top and bottom.
+    public static func playingBubbleDiameter(notch: CGSize) -> CGFloat { max(20, notch.height - 2) }
+
+    /// Where the pointer also brings a tucked island out while music plays: on
+    /// what stays out of it. nil when nothing does, or it's within `revealArea`
+    /// anyway. Screen coordinates (origin bottom-left), like the notch rect.
+    public static func playingHoverArea(style: PlayingStyle, notch: CGRect) -> CGRect? {
+        let d = playingBubbleDiameter(notch: notch.size), m: CGFloat = 4
+        let right = CGRect(x: notch.maxX + playingBubbleGap, y: notch.maxY - 1 - d, width: d, height: d)
+        let left = CGRect(x: notch.minX - playingBubbleGap - d, y: right.minY, width: d, height: d)
+        switch style {
+        case .tucked, .underglow:
+            return nil
+        case .slim:
+            return CGRect(x: notch.minX - playingSlimEar, y: notch.minY, width: notch.width + 2 * playingSlimEar, height: notch.height)
+                .insetBy(dx: -m, dy: -m)
+        case .bubble:
+            return right.insetBy(dx: -m, dy: -m)
+        case .twoBubbles:
+            return left.union(right).insetBy(dx: -m, dy: -m)
+        case .drip:
+            let below = playingDropGap + playingDropDiameter
+            return CGRect(x: notch.midX - playingDropDiameter / 2, y: notch.minY - below, width: playingDropDiameter, height: notch.height + below)
+                .insetBy(dx: -m, dy: -m)
+        case .record:
+            return CGRect(x: notch.maxX, y: notch.minY, width: playingRecordPeek, height: notch.height).insetBy(dx: -m, dy: -m)
+        }
+    }
+
     /// The lock that opens when the Mac unlocks: a lock in the left ear.
     public static func lockSize(notch: CGSize) -> CGSize {
         CGSize(width: notch.width + 2 * (earOuterPadding + glyph + earInnerGap), height: notch.height)

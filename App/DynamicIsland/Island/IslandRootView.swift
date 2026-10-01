@@ -14,6 +14,9 @@ struct IslandRootView: View {
         let shape = NotchShape(bottomRadius: model.radius, shoulder: IslandMetrics.shoulder)
 
         ZStack(alignment: .top) {
+            // While music plays on a tucked island: what stays out, behind the island.
+            PlayingIndicatorView(model: model)
+
             island(size: size, shape: shape)
                 // The pointer arriving on the closed island: one springy bounce, no resize.
                 .keyframeAnimator(initialValue: Bounce(), trigger: model.bounce) { content, b in

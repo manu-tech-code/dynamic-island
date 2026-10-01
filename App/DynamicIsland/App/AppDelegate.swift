@@ -155,12 +155,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         case "debug-visibility":
-            // dynamicisland://debug-visibility?mode=onHover|always&reveal=1|0
+            // dynamicisland://debug-visibility?mode=onHover|always&style=slide&playing=bubble&reveal=1|0&announce=1
             if let mode = query["mode"].flatMap(IslandVisibility.init(rawValue:)) { env.settings.settings.visibility = mode }
             if let style = query["style"].flatMap(RevealStyle.init(rawValue:)) { env.settings.settings.revealStyle = style }
+            if let playing = query["playing"].flatMap(PlayingStyle.init(rawValue:)) { env.settings.settings.whilePlaying = playing }
             if let reveal = query["reveal"] { islands.controllers.values.forEach { $0.model.setRevealed(reveal == "1") } }
+            if query["announce"] == "1" { islands.controllers.values.forEach { $0.model.announceTrack() } }
             for c in islands.controllers.values {
-                Log.info("visibility \(c.model.settings.visibility.rawValue)/\(c.model.settings.revealStyle.rawValue), revealed \(c.model.revealed), tucked \(c.model.isTucked): \(c.model.contentKey) \(Int(c.model.outerSize.width))×\(Int(c.model.outerSize.height))")
+                Log.info("visibility \(c.model.settings.visibility.rawValue)/\(c.model.settings.revealStyle.rawValue), playing \(c.model.settings.whilePlaying.rawValue) \(c.model.indicatorPhase), revealed \(c.model.revealed), announcing \(c.model.announcing), tucked \(c.model.isTucked): \(c.model.contentKey) \(Int(c.model.outerSize.width))×\(Int(c.model.outerSize.height))")
                 if let name = query["render"] {
                     // The live island, drawn offline over the wallpaper (glass shows as a placeholder).
                     let r = ImageRenderer(content: PreviewCanvas(model: c.model, availableWidth: 760).environment(env))
@@ -169,6 +171,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         try? rep.representation(using: .png, properties: [:])?.write(to: Log.fileURL.deletingLastPathComponent().appendingPathComponent("vis-\(name).png"))
                     }
                 }
+            }
+        case "debug-render-goo":
+            // The bubbles and the drop at a few points of coming out of the notch.
+            let r = ImageRenderer(content: PlayingIndicatorFrames())
+            r.scale = 2
+            if let img = r.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+                try? rep.representation(using: .png, properties: [:])?.write(to: Log.fileURL.deletingLastPathComponent().appendingPathComponent("goo-frames.png"))
+                Log.info("rendered goo-frames.png")
             }
         case "debug-reveal-preview":
             // The Settings reveal preview's island, out and tucked, rendered offline.

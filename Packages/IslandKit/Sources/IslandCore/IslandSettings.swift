@@ -72,6 +72,37 @@ public enum RevealStyle: String, Codable, CaseIterable, Sendable, Identifiable {
     }
 }
 
+/// What stays out of a tucked island while a song plays (when the island
+/// hides until hover). The pointer on it brings the whole island out.
+public enum PlayingStyle: String, Codable, CaseIterable, Sendable, Identifiable {
+    /// Nothing: the island stays under the notch.
+    case tucked
+    /// Slim ears with only the artwork and the waveform.
+    case slim
+    /// The artwork in a bubble beside the notch, pulled out of it like a drop of water.
+    case bubble
+    /// The artwork in a bubble on the left, the waveform in one on the right.
+    case twoBubbles
+    /// The artwork in a drop hanging from the camera.
+    case drip
+    /// A record with the artwork as its label, peeking out and spinning.
+    case record
+    /// A glow in the artwork's colour under the notch, pulsing to the beat.
+    case underglow
+    public var id: String { rawValue }
+    public var displayName: String {
+        switch self {
+        case .tucked: "Stay tucked"
+        case .slim: "Artwork and waveform"
+        case .bubble: "Bubble"
+        case .twoBubbles: "Two bubbles"
+        case .drip: "Drip"
+        case .record: "Record"
+        case .underglow: "Underglow"
+        }
+    }
+}
+
 /// What the island does while an app is full screen on its display.
 public enum FullScreenBehavior: String, Codable, CaseIterable, Sendable, Identifiable {
     /// Stay as usual.
@@ -125,6 +156,8 @@ public struct NowPlayingSettings: Codable, Equatable, Sendable {
     public var showUpNext: Bool = true
     /// Resting the pointer on the compact island shows the title and artist under it.
     public var titleOnHover: Bool = true
+    /// A new song shows its title for a moment, the island coming out if it's tucked.
+    public var titleOnTrackChange: Bool = true
     public init() {}
 }
 
@@ -259,6 +292,8 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     public var visibility: IslandVisibility = .always
     /// How the island comes out and tucks back in, when it hides until hover.
     public var revealStyle: RevealStyle = .slide
+    /// What stays out while a song plays, when the island hides until hover.
+    public var whilePlaying: PlayingStyle = .tucked
     /// On displays without a camera, draw the black virtual notch even when idle.
     public var virtualNotchWhenIdle: Bool = true
     /// The lock opening on the island when the Mac unlocks.
@@ -345,7 +380,7 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case material, compactStyle, maxActivities, priority, openOnHover, hoverDelayMs, collapseOnMouseLeave
         case glowFromArtwork, displays, showMenuBarIcon, modules
-        case openWidthScale, compactMaxWidth, dashboardButton, fullScreen, visibility, revealStyle, virtualNotchWhenIdle, lockIndicator, hotKey
+        case openWidthScale, compactMaxWidth, dashboardButton, fullScreen, visibility, revealStyle, whilePlaying, virtualNotchWhenIdle, lockIndicator, hotKey
         case nowPlaying, backgroundApps, calendar, timers, battery, systemStats
         case shelf, downloads, devices, hud, weather, clipboard, shortcuts, privacy, dashboard
     }
@@ -378,6 +413,7 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         fullScreen = v(.fullScreen, d.fullScreen)
         visibility = v(.visibility, d.visibility)
         revealStyle = v(.revealStyle, d.revealStyle)
+        whilePlaying = v(.whilePlaying, d.whilePlaying)
         virtualNotchWhenIdle = v(.virtualNotchWhenIdle, d.virtualNotchWhenIdle)
         lockIndicator = v(.lockIndicator, d.lockIndicator)
         hotKey = c.tolerant(.hotKey, d.hotKey)

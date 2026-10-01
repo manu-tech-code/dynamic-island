@@ -137,7 +137,8 @@ private struct Wallpaper: View {
 
 /// The hover-to-show animation in Settings: the real island with what's live,
 /// over your wallpaper and a notch, tucking in and coming out on a loop in the
-/// chosen style. Pointing at it plays it on demand; a new style replays at once.
+/// chosen style, with what stays out while music plays. Pointing at it plays
+/// it on demand; a new style replays at once.
 struct RevealPreview: View {
     @Environment(AppEnvironment.self) private var env
     @State private var model: IslandViewModel?
@@ -172,6 +173,9 @@ struct RevealPreview: View {
                     Button("Start a 1-Minute Timer") { env.timers.start(minutes: 1, label: "Preview timer") }
                 }
                 .font(.callout)
+            } else if env.settings.settings.whilePlaying != .tucked, !(model?.isPlayingMusic ?? false) {
+                Text("Play a song to see what stays out while music plays.")
+                    .font(.caption).foregroundStyle(.secondary)
             } else {
                 Text("Plays on its own; point at it to play it yourself.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -188,6 +192,7 @@ struct RevealPreview: View {
         }
         .onDisappear { loop?.cancel() }
         .onChange(of: env.settings.settings.revealStyle) { replay() }
+        .onChange(of: env.settings.settings.whilePlaying) { replay() }
     }
 
     /// Out for a moment, then tucked in again, until the pane closes.
