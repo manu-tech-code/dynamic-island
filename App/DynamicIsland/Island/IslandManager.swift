@@ -41,6 +41,9 @@ final class IslandManager {
 
     func toggleDashboard() { primary?.toggleDashboard() }
 
+    /// Closes whatever is open on every display (dashboard, player, shelf).
+    func collapseAll() { controllers.values.forEach { $0.model.collapse() } }
+
     // MARK: displays
 
     private func rebuild() {
