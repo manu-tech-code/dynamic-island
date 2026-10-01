@@ -379,6 +379,8 @@ public struct IslandAlert: Identifiable, Equatable, Sendable {
         case brightness(level: Double)
         /// A general note, e.g. the first-run tip.
         case message(title: String, subtitle: String, symbol: String)
+        /// A newer version was found by the daily check; Install opens Sparkle.
+        case updateAvailable(version: String)
     }
 
     /// Status alerts show like a compact activity (an icon on the left, a ring on

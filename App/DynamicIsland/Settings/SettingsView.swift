@@ -779,6 +779,9 @@ private struct PermissionRow<Action: View>: View {
 // MARK: About
 
 private struct AboutPane: View {
+    @Environment(AppEnvironment.self) private var env
+    @State private var automatic = false
+
     var body: some View {
         Form {
             Section {
@@ -787,10 +790,16 @@ private struct AboutPane: View {
                 LabeledContent("macOS", value: ProcessInfo.processInfo.operatingSystemVersionString)
             }
             Section {
-                Button("Show Log File in Finder") { NSWorkspace.shared.activateFileViewerSelecting([Log.fileURL]) }
+                Toggle("Check for updates automatically", isOn: $automatic)
+                    .onChange(of: automatic) { _, on in env.updates.automaticallyChecks = on }
+                LabeledContent("Last checked", value: env.updates.lastChecked.map { $0.formatted(.relative(presentation: .named)) } ?? "Never")
+                Button(env.updates.available.map { "Install Update \($0)…" } ?? "Check for Updates…") { env.updates.checkForUpdates() }
+            } header: {
+                Text("Updates")
             } footer: {
-                Text("A personal build of Dynamic Island, signed with your Apple Development certificate.")
+                Text("Once a day, Dynamic Island looks at the latest release on GitHub. Updates are verified against your update key before they're installed, and your settings and permissions carry over.")
             }
+            .onAppear { automatic = env.updates.automaticallyChecks }
         }
     }
 }

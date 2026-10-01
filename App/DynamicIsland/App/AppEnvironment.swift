@@ -26,6 +26,7 @@ final class AppEnvironment {
     let shortcuts: ShortcutsService
     let fullScreen: FullScreenMonitor
     let lock: LockMonitor
+    let updates: UpdateService
 
     @ObservationIgnored var openSettings: () -> Void = {}
 
@@ -53,6 +54,7 @@ final class AppEnvironment {
         shortcuts = ShortcutsService()
         fullScreen = FullScreenMonitor()
         lock = LockMonitor()
+        updates = UpdateService(engine: engine)
         let providers: [ActivityProvider] = [nowPlaying, timers, battery, calendar, backgroundApps, shelf, downloads, privacy]
         providers.forEach(engine.register)
     }
@@ -66,6 +68,7 @@ final class AppEnvironment {
         hud.start()
         fullScreen.start()
         lock.start()
+        updates.start()
         clipboard.start()
         shortcuts.reload()
         // Modules that ask for permission start only when they're on.

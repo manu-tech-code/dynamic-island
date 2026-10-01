@@ -46,8 +46,9 @@ final class ActivityEngine {
     // MARK: alerts
 
     func post(_ alert: IslandAlert) {
-        if case .message = alert.style {} else {
-            guard settings.settings[module: alert.kind].enabled else { return }
+        switch alert.style {
+        case .message, .updateAvailable: break // not tied to a module
+        default: guard settings.settings[module: alert.kind].enabled else { return }
         }
         Log.info("alert \(alert.style)")
         queue.append(alert)

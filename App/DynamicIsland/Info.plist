@@ -17,7 +17,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.4.1</string>
+	<string>0.5.0</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -30,7 +30,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>5</string>
+	<string>6</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
 	<key>LSMinimumSystemVersion</key>
@@ -53,5 +53,15 @@
 	<string>Dynamic Island shows the weather where you are. Coordinates are rounded to about 1 km.</string>
 	<key>NSPrefersDisplaySafeAreaCompatibilityMode</key>
 	<false/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/manu-tech-code/dynamic-island/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>gn4eKuPKn8p+s/xn9/mJJ3vRAcb1uvIogEQczSSzNQs=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
 </dict>
 </plist>

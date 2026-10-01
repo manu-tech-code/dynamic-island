@@ -1,9 +1,12 @@
 #!/bin/zsh
-# Builds a Release copy and packages it as a .dmg with an Applications link.
-#   scripts/release.sh            build build/DynamicIsland-<version>.dmg
-#   scripts/release.sh --upload   also attach it to the draft GitHub release v<version>
+# Builds a Release copy, packages it as a .dmg with an Applications link, signs
+# the .dmg for Sparkle and writes the appcast that installed copies read.
+#   scripts/release.sh            build build/DynamicIsland-<version>.dmg and build/appcast.xml
+#   scripts/release.sh --upload   also attach both to the draft GitHub release v<version>
 #                                 and publish it (run from release/<version>, after the
 #                                 Release workflow; published releases are immutable)
+# Sparkle's update key lives in the login Keychain (account com.dynamicisland.mac);
+# its public half is SUPublicEDKey in project.yml.
 # The app is signed with your Apple Development certificate: it runs on your
 # own Macs. Sharing it with other people needs a Developer ID certificate and
 # notarization (Apple Developer Program).
@@ -46,10 +49,14 @@ hdiutil create -volname "Dynamic Island $VERSION" -srcfolder "$STAGE" -ov -forma
 rm -rf "$STAGE"
 echo "built $DMG ($(du -h "$DMG" | cut -f1))"
 
+# Sparkle: the signed appcast that installed copies read from the latest release.
+scripts/appcast.sh "$DMG"
+APPCAST="$ROOT/build/appcast.xml"
+
 if $UPLOAD; then
   [[ "$(gh release view "v$VERSION" --json isDraft --jq .isDraft)" == "true" ]] \
     || { echo "v$VERSION is already published (immutable): assets can only be added to a draft"; exit 1; }
-  gh release upload "v$VERSION" "$DMG" --clobber
+  gh release upload "v$VERSION" "$DMG" "$APPCAST" --clobber
   gh release edit "v$VERSION" --draft=false --latest >/dev/null
   echo "published $(gh release view "v$VERSION" --json url --jq .url)"
 fi
