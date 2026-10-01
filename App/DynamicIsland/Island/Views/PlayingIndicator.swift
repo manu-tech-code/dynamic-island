@@ -68,8 +68,7 @@ private struct SlimEars: View {
             ArtworkView(image: model.env.nowPlaying.artwork, size: 20, radius: 5)
                 .animation(fade) { $0.opacity(shown ? 1 : 0) }
                 .offset(x: -width / 2 + 8 + 10)
-            Waveform(playing: true, color: model.tint)
-                .font(.system(size: 13, weight: .semibold))
+            Waveform(playing: true, color: model.tint, animates: shown)
                 .frame(width: 20)
                 .animation(fade) { $0.opacity(shown ? 1 : 0) }
                 .offset(x: width / 2 - 8 - 10)
@@ -139,7 +138,7 @@ private struct Droplets: View {
             ForEach(drops, id: \.self) { drop in
                 let rest = drop.circle(notch: n, progress: 1)
                 let now = drop.circle(notch: n, progress: progress)
-                inside(drop, diameter: rest.diameter)
+                inside(drop, diameter: rest.diameter, moving: shown)
                     .animation(fade) { $0.opacity(shown ? 1 : 0) }
                     .scaleEffect(now.diameter / rest.diameter)
                     .position(x: size.width / 2 + now.center.x, y: now.center.y)
@@ -149,10 +148,9 @@ private struct Droplets: View {
         .animation(motion, value: phase)
     }
 
-    @ViewBuilder private func inside(_ drop: Droplet, diameter d: CGFloat) -> some View {
+    @ViewBuilder private func inside(_ drop: Droplet, diameter d: CGFloat, moving: Bool) -> some View {
         if style == .twoBubbles, drop == .right {
-            Waveform(playing: true, color: model.tint)
-                .font(.system(size: d * 0.42, weight: .semibold))
+            Waveform(playing: true, color: model.tint, height: (d * 0.42).rounded(), animates: moving)
         } else {
             let art = d - 2 * (drop == .drop ? 3 : 4)
             ArtworkView(image: model.env.nowPlaying.artwork, size: art, radius: art / 2)
@@ -207,42 +205,44 @@ nonisolated private struct GooShapes: View, Animatable {
 
 /// A record with the artwork as its label, peeking out from behind the notch
 /// and spinning while the song plays. It rolls away under the notch when the
-/// island comes out, and when the music stops.
+/// island comes out, and when the music stops. The disc is drawn once per
+/// artwork; Core Animation turns it.
 private struct Record: View {
     let model: IslandViewModel
     let phase: IslandViewModel.IndicatorPhase
+    @State private var disc: CGImage?
 
     var body: some View {
         let n = model.notch.rect.size
         let d = IslandMetrics.playingBubbleDiameter(notch: n)
         let shown = phase == .shown
+        let artwork = model.env.nowPlaying.artwork
         // Out: its right edge `playingRecordPeek` past the notch. In: fully behind it.
         let x = shown ? n.width / 2 + IslandMetrics.playingRecordPeek - d / 2 : n.width / 2 - d / 2 - 8
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !shown || model.reduceMotion)) { ctx in
-            let turn = ctx.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 2.2) / 2.2
-            disc(d).rotationEffect(.degrees(turn * 360))
-        }
-        // The light on it stays put while it turns.
-        .overlay {
-            AngularGradient(stops: [.init(color: .clear, location: 0.08), .init(color: .white.opacity(0.14), location: 0.12),
-                                    .init(color: .clear, location: 0.17), .init(color: .clear, location: 0.58),
-                                    .init(color: .white.opacity(0.1), location: 0.62), .init(color: .clear, location: 0.67)],
-                            center: .center, angle: .degrees(20))
-                .clipShape(Circle())
-        }
-        .shadow(color: .black.opacity(0.45), radius: 3, y: 1)
-        .offset(x: x, y: 1)
-        .frame(width: n.width + 2 * (d + 24), height: n.height, alignment: .top)
-        .animation(model.reduceMotion ? IslandMotion.reduced : shown ? IslandMotion.recordOut : IslandMotion.dropletIn, value: phase)
+        LayerAnimatedImage(image: disc, motion: .spin(period: 2.2), moving: shown && !model.reduceMotion)
+            .frame(width: d, height: d)
+            // The light on it stays put while it turns.
+            .overlay {
+                AngularGradient(stops: [.init(color: .clear, location: 0.08), .init(color: .white.opacity(0.14), location: 0.12),
+                                        .init(color: .clear, location: 0.17), .init(color: .clear, location: 0.58),
+                                        .init(color: .white.opacity(0.1), location: 0.62), .init(color: .clear, location: 0.67)],
+                                center: .center, angle: .degrees(20))
+                    .clipShape(Circle())
+            }
+            .shadow(color: .black.opacity(0.45), radius: 3, y: 1)
+            .offset(x: x, y: 1)
+            .frame(width: n.width + 2 * (d + 24), height: n.height, alignment: .top)
+            .animation(model.reduceMotion ? IslandMotion.reduced : shown ? IslandMotion.recordOut : IslandMotion.dropletIn, value: phase)
+            .task(id: artwork.map(ObjectIdentifier.init)) { disc = LayerPicture.render(Self.disc(d, artwork: artwork)) }
     }
 
-    private func disc(_ d: CGFloat) -> some View {
+    private static func disc(_ d: CGFloat, artwork: NSImage?) -> some View {
         ZStack {
             Circle().fill(Color(white: 0.08))
             ForEach(1..<5, id: \.self) { i in
                 Circle().strokeBorder(.white.opacity(0.07), lineWidth: 0.5).padding(CGFloat(i) * 2.2)
             }
-            ArtworkView(image: model.env.nowPlaying.artwork, size: d * 0.38, radius: d * 0.19)
+            ArtworkView(image: artwork, size: d * 0.38, radius: d * 0.19)
             Circle().fill(Color(white: 0.05)).frame(width: 3, height: 3)
         }
         .frame(width: d, height: d)
@@ -251,29 +251,35 @@ private struct Record: View {
 
 // MARK: underglow
 
-/// No shapes at all: a soft glow in the artwork's colour under the notch, pulsing.
+/// No shapes at all: a soft glow in the artwork's colour under the notch,
+/// pulsing. Drawn once per colour; Core Animation pulses it.
 private struct Underglow: View {
     let model: IslandViewModel
     let phase: IslandViewModel.IndicatorPhase
+    @State private var glow: CGImage?
+    /// Room around the bar for its blur.
+    private static let margin: CGFloat = 12
 
     var body: some View {
         let n = model.notch.rect.size
         let shown = phase == .shown
         let tint = model.glowTint
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !shown || model.reduceMotion)) { ctx in
-            let beat = model.reduceMotion ? 1 : (sin(ctx.date.timeIntervalSinceReferenceDate * 2 * .pi / 1.8) + 1) / 2
-            Capsule()
-                .fill(LinearGradient(colors: [tint.opacity(0.75), tint, tint.opacity(0.75)], startPoint: .leading, endPoint: .trailing))
-                .frame(width: n.width - 16, height: 10)
-                .scaleEffect(x: 0.84 + 0.16 * beat)
-                .opacity(0.55 + 0.45 * beat)
-                .blur(radius: 4)
-        }
-        // Centred on the notch's bottom edge: only the half below it shows.
-        .padding(.top, n.height - 5)
-        .animation(model.reduceMotion ? IslandMotion.reduced : shown ? IslandMotion.glowIn : IslandMotion.glowOut) {
-            $0.opacity(shown ? 1 : 0)
-        }
+        let m = Self.margin
+        LayerAnimatedImage(image: glow, motion: .pulse(period: 0.9, opacity: 0.55, scaleX: 0.84), moving: shown && !model.reduceMotion)
+            .frame(width: n.width - 16 + 2 * m, height: 10 + 2 * m)
+            // Centred on the notch's bottom edge: only the half below it shows.
+            .padding(.top, n.height - 5 - m)
+            .animation(model.reduceMotion ? IslandMotion.reduced : shown ? IslandMotion.glowIn : IslandMotion.glowOut) {
+                $0.opacity(shown ? 1 : 0)
+            }
+            .task(id: tint) {
+                glow = LayerPicture.render(
+                    Capsule()
+                        .fill(LinearGradient(colors: [tint.opacity(0.75), tint, tint.opacity(0.75)], startPoint: .leading, endPoint: .trailing))
+                        .frame(width: n.width - 16, height: 10)
+                        .blur(radius: 4)
+                        .padding(m))
+            }
     }
 }
 

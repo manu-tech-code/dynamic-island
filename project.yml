@@ -47,8 +47,8 @@ targets:
       path: App/DynamicIsland/Info.plist
       properties:
         CFBundleDisplayName: Dynamic Island
-        CFBundleShortVersionString: "0.9.0"
-        CFBundleVersion: "13"
+        CFBundleShortVersionString: "0.10.0"
+        CFBundleVersion: "14"
         LSApplicationCategoryType: public.app-category.productivity
         LSMinimumSystemVersion: "26.0"
         LSUIElement: true
@@ -58,6 +58,7 @@ targets:
         NSBluetoothAlwaysUsageDescription: Dynamic Island shows AirPods and other Bluetooth devices, with their batteries, when they connect.
         NSLocationUsageDescription: Dynamic Island shows the weather where you are. Coordinates are rounded to about 1 km.
         NSLocationWhenInUseUsageDescription: Dynamic Island shows the weather where you are. Coordinates are rounded to about 1 km.
+        NSAudioCaptureUsageDescription: Dynamic Island moves the waveform's bars with the music by measuring how loud it is. The sound is only measured, never recorded or sent anywhere.
         NSDownloadsFolderUsageDescription: Dynamic Island shows the progress of downloads arriving in your Downloads folder.
         NSHumanReadableCopyright: Personal project
         CFBundleURLTypes:
