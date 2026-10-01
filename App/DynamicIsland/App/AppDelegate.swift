@@ -95,6 +95,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "next": env.nowPlaying.next()
         case "previous": env.nowPlaying.previous()
         #if DEBUG
+        case "debug-update-window":
+            // dynamicisland://debug-update-window?phase=found|checking|downloading|installing|uptodate|error&version=0.8.0
+            let phases: [String: UpdateFlow.Phase] = ["found": .found, "checking": .checking, "downloading": .downloading(0.42),
+                                                     "installing": .installing(nil), "uptodate": .upToDate,
+                                                     "error": .failed("The download didn't match its signature.")]
+            env.updates.debugWindow(phases[query["phase"] ?? "found"] ?? .found, version: query["version"] ?? "0.8.0")
+            if let name = query["render"] {
+                // Once the notes are in, the window's content drawn offline (light and dark).
+                Task { [env] in
+                    try? await Task.sleep(for: .seconds(3))
+                    for scheme in [ColorScheme.light, .dark] {
+                        let actions = UpdateActions(updateNow: {}, later: {}, skip: {}, cancel: {}, done: {}, viewOnGitHub: {}, closed: {})
+                        let view = UpdateWindowView(flow: env.updates.debugFlow, actions: actions, scrolls: false)
+                            .frame(width: 760, height: 540).environment(\.colorScheme, scheme)
+                        let r = ImageRenderer(content: view)
+                        r.scale = 2
+                        if let img = r.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+                            let file = "update-\(name)-\(scheme == .dark ? "dark" : "light").png"
+                            try? rep.representation(using: .png, properties: [:])?.write(to: Log.fileURL.deletingLastPathComponent().appendingPathComponent(file))
+                            Log.info("rendered \(file)")
+                        }
+                    }
+                }
+            }
+        case "debug-update-press":
+            // dynamicisland://debug-update-press?button=update|later|skip|cancel|ok|close
+            env.updates.debugPress(query["button"] ?? "")
         case "debug-update-background":
             // The daily check, now: a newer version should end up on the island.
             env.updates.debugBackgroundCheck()
