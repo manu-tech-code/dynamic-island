@@ -14,6 +14,8 @@ struct CompactView: View {
                 case .below: below(primary: primary, ranked: ranked)
                 }
             }
+            // Tucked under the camera: nothing in there can be clicked by accident.
+            .allowsHitTesting(!model.isTucked)
             // VoiceOver: one element that reads what's live, with actions.
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(model.accessibilitySummary)
@@ -26,7 +28,8 @@ struct CompactView: View {
 
     private func beside(primary: Activity, ranked: RankedActivities) -> some View {
         let notchW = model.notch.rect.width
-        let ear = max(0, (model.bodySize.width - notchW) / 2)
+        // Laid out at the full compact width even while tucked (see `ears`).
+        let ear = max(0, (model.layoutSize.width - notchW) / 2)
         let inner = max(0, ear - IslandMetrics.earOuterPadding - IslandMetrics.earInnerGap)
         return VStack(spacing: 0) {
             ears(primary: primary, ranked: ranked, inner: inner, notchW: notchW)
@@ -51,6 +54,9 @@ struct CompactView: View {
         let trailingApps = Array(apps.dropFirst(ears.leadingApps).prefix(ears.trailingApps))
         let leadingOthers = ranked.secondaries.filter { ears.leadingSecondaries.contains($0.id) }
         let trailingOthers = ranked.secondaries.filter { ears.trailingSecondaries.contains($0.id) }
+        // Tucked: each ear slides in by its own width, riding the island's
+        // closing edge until it's under the camera; the shape clips the rest.
+        let shift = model.isTucked ? IslandMetrics.earOuterPadding + inner + IslandMetrics.earInnerGap : 0
         return HStack(spacing: 0) {
             HStack(spacing: IslandMetrics.glyphSpacing) {
                 if primary.kind != .backgroundApps { CompactLeading(activity: primary, model: model) }
@@ -60,6 +66,7 @@ struct CompactView: View {
             .frame(width: inner, alignment: .leading)
             .padding(.leading, IslandMetrics.earOuterPadding)
             .padding(.trailing, IslandMetrics.earInnerGap)
+            .offset(x: shift)
             Color.clear.frame(width: notchW)
             HStack(spacing: IslandMetrics.glyphSpacing) {
                 if primary.kind != .backgroundApps { CompactTrailing(activity: primary, model: model) }
@@ -70,6 +77,7 @@ struct CompactView: View {
             .frame(width: inner, alignment: .trailing)
             .padding(.leading, IslandMetrics.earInnerGap)
             .padding(.trailing, IslandMetrics.earOuterPadding)
+            .offset(x: -shift)
         }
         .frame(height: model.notch.rect.height)
         .padding(.horizontal, IslandMetrics.shoulder)
@@ -87,6 +95,8 @@ struct CompactView: View {
             }
             .padding(.horizontal, 14)
             .frame(height: IslandMetrics.belowBand - 2)
+            // Tucked: the band rides up into the notch as the island closes.
+            .offset(y: model.isTucked ? -IslandMetrics.belowBand : 0)
             if let track = model.peekingTrack, !track.artist.isEmpty {
                 // The band shows the title; the artist goes under it, aligned with it.
                 Text(track.artist)

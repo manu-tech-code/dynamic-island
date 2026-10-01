@@ -127,7 +127,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let mode = query["mode"].flatMap(IslandVisibility.init(rawValue:)) { env.settings.settings.visibility = mode }
             if let reveal = query["reveal"] { islands.controllers.values.forEach { $0.model.setRevealed(reveal == "1") } }
             for c in islands.controllers.values {
-                Log.info("visibility \(c.model.settings.visibility.rawValue), revealed \(c.model.revealed): \(c.model.contentKey) \(Int(c.model.outerSize.width))×\(Int(c.model.outerSize.height))")
+                Log.info("visibility \(c.model.settings.visibility.rawValue), revealed \(c.model.revealed), tucked \(c.model.isTucked): \(c.model.contentKey) \(Int(c.model.outerSize.width))×\(Int(c.model.outerSize.height))")
+                if let name = query["render"] {
+                    // The live island, drawn offline over the wallpaper (glass shows as a placeholder).
+                    let r = ImageRenderer(content: PreviewCanvas(model: c.model, availableWidth: 760).environment(env))
+                    r.scale = 2
+                    if let img = r.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+                        try? rep.representation(using: .png, properties: [:])?.write(to: Log.fileURL.deletingLastPathComponent().appendingPathComponent("vis-\(name).png"))
+                    }
+                }
             }
         case "debug-lock":
             // Plays the lock, then the unlock, without locking the Mac.

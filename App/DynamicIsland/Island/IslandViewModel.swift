@@ -56,7 +56,7 @@ final class IslandViewModel {
         case .expanded(let id) where engine.activity(id: id) != nil: return .expanded(activityID: id)
         case .dashboard: return .dashboard
         case .shelf: return .shelf
-        default: return ranked.isEmpty || concealed ? .idle : .compact
+        default: return ranked.isEmpty ? .idle : .compact
         }
     }
 
@@ -66,7 +66,10 @@ final class IslandViewModel {
     var hidesUntilHover: Bool { settings.visibility == .onHover && !isPreview }
     /// The pointer brought the island out (only matters while it hides until hover).
     private(set) var revealed = false
-    private var concealed: Bool { hidesUntilHover && !revealed }
+    /// Tucked under the notch: the compact island keeps its content laid out as
+    /// usual, but its sides close in to the notch and each ear's content slides
+    /// in with its edge, under the camera. Coming out runs the same motion back.
+    var isTucked: Bool { hidesUntilHover && !revealed && presentation == .compact }
 
     /// The island comes out from under the notch, or tucks back in.
     func setRevealed(_ on: Bool) {
@@ -140,7 +143,7 @@ final class IslandViewModel {
 
     /// The track playing on the compact island, while it shows its title under the ears.
     var peekingTrack: NowPlayingInfo? {
-        guard peek, !isPreview, settings.nowPlaying.titleOnHover, presentation == .compact,
+        guard peek, !isPreview, !isTucked, settings.nowPlaying.titleOnHover, presentation == .compact,
               case .nowPlaying(let info)? = compactFit.ranked.primary?.payload, !info.title.isEmpty else { return nil }
         return info
     }
@@ -154,7 +157,7 @@ final class IslandViewModel {
 
     /// Where a peek can open: the track's artwork on the compact island, or a device alert's icon.
     var allowsPeek: Bool {
-        if presentation == .compact { return true }
+        if presentation == .compact { return !isTucked }
         if case .alert(let a) = presentation, case .deviceConnected = a.style { return true }
         return false
     }
@@ -173,7 +176,14 @@ final class IslandViewModel {
         notch.rect.height + (settings.compactStyle == .beside ? peekHeight : 0)
     }
 
+    /// The island's size: what it lays out at, except while tucked under the notch.
     var bodySize: CGSize {
+        isTucked ? IslandMetrics.idleSize(notch: notch.rect.size) : layoutSize
+    }
+
+    /// The size content is laid out at. While tucked, the compact content keeps
+    /// this layout and slides under the notch instead of being laid out again.
+    var layoutSize: CGSize {
         let p = presentation
         var size: CGSize
         let kind = expandedActivity?.kind
@@ -281,7 +291,7 @@ final class IslandViewModel {
 
     /// Colour behind the island while music plays, taken from the artwork.
     var glowColor: Color? {
-        guard settings.glowFromArtwork, let color = env.nowPlaying.artworkColor,
+        guard settings.glowFromArtwork, !isTucked, let color = env.nowPlaying.artworkColor,
               env.nowPlaying.info?.isPlaying == true else { return nil }
         switch presentation {
         case .compact where ranked.primary?.kind == .nowPlaying: return Color(nsColor: color)
