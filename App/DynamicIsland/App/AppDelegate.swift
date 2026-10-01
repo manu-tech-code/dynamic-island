@@ -125,9 +125,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "debug-visibility":
             // dynamicisland://debug-visibility?mode=onHover|always&reveal=1|0
             if let mode = query["mode"].flatMap(IslandVisibility.init(rawValue:)) { env.settings.settings.visibility = mode }
+            if let style = query["style"].flatMap(RevealStyle.init(rawValue:)) { env.settings.settings.revealStyle = style }
             if let reveal = query["reveal"] { islands.controllers.values.forEach { $0.model.setRevealed(reveal == "1") } }
             for c in islands.controllers.values {
-                Log.info("visibility \(c.model.settings.visibility.rawValue), revealed \(c.model.revealed): \(c.model.contentKey) \(Int(c.model.outerSize.width))×\(Int(c.model.outerSize.height))")
+                Log.info("visibility \(c.model.settings.visibility.rawValue)/\(c.model.settings.revealStyle.rawValue), revealed \(c.model.revealed), tucked \(c.model.isTucked): \(c.model.contentKey) \(Int(c.model.outerSize.width))×\(Int(c.model.outerSize.height))")
+                if let name = query["render"] {
+                    // The live island, drawn offline over the wallpaper (glass shows as a placeholder).
+                    let r = ImageRenderer(content: PreviewCanvas(model: c.model, availableWidth: 760).environment(env))
+                    r.scale = 2
+                    if let img = r.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+                        try? rep.representation(using: .png, properties: [:])?.write(to: Log.fileURL.deletingLastPathComponent().appendingPathComponent("vis-\(name).png"))
+                    }
+                }
+            }
+        case "debug-reveal-preview":
+            // The Settings reveal preview's island, out and tucked, rendered offline.
+            let m = IslandViewModel(env: env, notch: NotchRect(rect: CGRect(x: 0, y: 0, width: 185, height: 32), isHardware: false))
+            m.forced = .compact
+            for (name, tucked) in [("out", false), ("tucked", true)] {
+                m.setPreviewTuck(tucked)
+                let r = ImageRenderer(content: PreviewCanvas(model: m, availableWidth: 760, height: 96).environment(env))
+                r.scale = 2
+                if let img = r.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+                    try? rep.representation(using: .png, properties: [:])?.write(to: Log.fileURL.deletingLastPathComponent().appendingPathComponent("reveal-preview-\(name).png"))
+                    Log.info("reveal preview \(name): tucked \(m.isTucked) \(m.contentKey) \(Int(m.outerSize.width))×\(Int(m.outerSize.height)) style \(m.revealStyle?.rawValue ?? "-")")
+                }
             }
         case "debug-lock":
             // Plays the lock, then the unlock, without locking the Mac.

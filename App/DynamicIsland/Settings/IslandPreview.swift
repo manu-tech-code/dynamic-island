@@ -88,10 +88,12 @@ struct IslandPreview: View {
 struct PreviewCanvas: View {
     let model: IslandViewModel
     let availableWidth: CGFloat
+    /// A fixed canvas height, for previews whose island changes size (the reveal).
+    var height: CGFloat?
     static let width: CGFloat = 760
 
     var body: some View {
-        let canvasHeight = model.outerSize.height + 56
+        let canvasHeight = height ?? model.outerSize.height + 56
         let scale = min(1, max(0.3, availableWidth / Self.width))
         ZStack(alignment: .top) {
             Wallpaper()
@@ -129,6 +131,87 @@ private struct Wallpaper: View {
         .onAppear {
             guard image == nil, let screen = NSScreen.main, let url = NSWorkspace.shared.desktopImageURL(for: screen) else { return }
             image = NSImage(contentsOf: url)
+        }
+    }
+}
+
+/// The hover-to-show animation in Settings: the real island with what's live,
+/// over your wallpaper and a notch, tucking in and coming out on a loop in the
+/// chosen style. Pointing at it plays it on demand; a new style replays at once.
+struct RevealPreview: View {
+    @Environment(AppEnvironment.self) private var env
+    @State private var model: IslandViewModel?
+    @State private var availableWidth: CGFloat = 600
+    @State private var hovering = false
+    @State private var loop: Task<Void, Never>?
+
+    var body: some View {
+        VStack(spacing: 8) {
+            if let model {
+                PreviewCanvas(model: model, availableWidth: availableWidth, height: 96)
+                    .frame(maxWidth: .infinity)
+                    // The canvas takes no clicks, so a clear layer on top follows the pointer.
+                    .overlay {
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onHover { inside in
+                                hovering = inside
+                                model.setPreviewTuck(!inside)
+                            }
+                    }
+                    .background {
+                        GeometryReader { geo in
+                            Color.clear.onAppear { availableWidth = geo.size.width }
+                                .onChange(of: geo.size.width) { _, w in availableWidth = w }
+                        }
+                    }
+            }
+            if env.engine.ranked.isEmpty {
+                HStack(spacing: 8) {
+                    Text("Nothing is live right now.").foregroundStyle(.secondary)
+                    Button("Start a 1-Minute Timer") { env.timers.start(minutes: 1, label: "Preview timer") }
+                }
+                .font(.callout)
+            } else {
+                Text("Plays on its own; point at it to play it yourself.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .onAppear {
+            if model == nil {
+                let m = IslandViewModel(env: env, notch: NotchRect(rect: CGRect(x: 0, y: 0, width: 185, height: 32), isHardware: false))
+                m.forced = .compact
+                m.setPreviewTuck(true)
+                model = m
+            }
+            startLoop()
+        }
+        .onDisappear { loop?.cancel() }
+        .onChange(of: env.settings.settings.revealStyle) { replay() }
+    }
+
+    /// Out for a moment, then tucked in again, until the pane closes.
+    private func startLoop() {
+        loop?.cancel()
+        loop = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(1500))
+                guard !Task.isCancelled, let model, !hovering else { continue }
+                model.setPreviewTuck(!(model.previewTuck ?? true))
+            }
+        }
+    }
+
+    /// A new style: tuck in at once, then come out in it.
+    private func replay() {
+        guard let model, !hovering else { return }
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) { model.setPreviewTuck(true) }
+        startLoop()
+        Task {
+            try? await Task.sleep(for: .milliseconds(250))
+            model.setPreviewTuck(false)
         }
     }
 }

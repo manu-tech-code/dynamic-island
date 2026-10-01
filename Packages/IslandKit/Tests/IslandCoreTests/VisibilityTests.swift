@@ -21,6 +21,20 @@ import Testing
         #expect(IslandSettings.decode(s.encoded()).visibility == .onHover)
     }
 
+    @Test func revealStyleDefaultsToSlideAndRoundTrips() throws {
+        #expect(IslandSettings().revealStyle == .slide)
+        let old = try JSONDecoder().decode(IslandSettings.self, from: Data(#"{"visibility":"onHover"}"#.utf8))
+        #expect(old.revealStyle == .slide) // settings from before the option
+        let unknown = try JSONDecoder().decode(IslandSettings.self, from: Data(#"{"revealStyle":"teleport"}"#.utf8))
+        #expect(unknown.revealStyle == .slide)
+        for style in RevealStyle.allCases {
+            var s = IslandSettings()
+            s.revealStyle = style
+            #expect(IslandSettings.decode(s.encoded()).revealStyle == style)
+        }
+        #expect(Set(RevealStyle.allCases.map(\.displayName)).count == RevealStyle.allCases.count)
+    }
+
     @Test func revealAreaCoversTheCameraWithRoomToSpare() {
         let notch = CGRect(x: 663.5, y: 950, width: 185, height: 32) // M5 MacBook Pro 14", points
         let area = IslandMetrics.revealArea(notch: notch)
