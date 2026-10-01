@@ -129,7 +129,8 @@ final class ShelfService: ActivityProvider {
         if let cached = icons[item.id] { return cached }
         let u = url(for: item)
         var image = NSWorkspace.shared.icon(forFile: u.path)
-        if item.kind == .image, let full = NSImage(contentsOf: u) { image = full }
+        // A picture shows itself, at thumbnail size (the shelf's tiles are small).
+        if item.kind == .image, let thumb = Thumbnail.image(at: u, maxPixels: 256) { image = thumb }
         icons[item.id] = image
         return image
     }

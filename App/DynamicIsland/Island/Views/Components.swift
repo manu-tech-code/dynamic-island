@@ -88,20 +88,6 @@ struct ProgressTrack: View {
     }
 }
 
-/// Animated waveform like the iPhone's Now Playing ear. Static when paused or with Reduce Motion.
-struct Waveform: View {
-    let playing: Bool
-    let color: Color
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        Image(systemName: "waveform")
-            .symbolEffect(.variableColor.iterative.dimInactiveLayers, options: .repeating, isActive: playing && !reduceMotion)
-            .foregroundStyle(color)
-            .opacity(playing ? 1 : 0.45)
-    }
-}
-
 /// One line of text that scrolls slowly when it doesn't fit, pausing at the
 /// start of each pass. With Reduce Motion it truncates instead. Only runs a
 /// timeline while it overflows and is on screen.
@@ -130,7 +116,8 @@ struct MarqueeText: View {
             }
             .overlay(alignment: .leading) {
                 if scrolls {
-                    TimelineView(.animation(minimumInterval: 1.0 / 60)) { ctx in
+                    // 30 fps: a point a frame at this speed, and half the redraws of 60.
+                    TimelineView(.animation(minimumInterval: 1.0 / 30)) { ctx in
                         let travel = textWidth + gap
                         let cycle = pause + Double(travel / speed)
                         let t = ctx.date.timeIntervalSince(start).truncatingRemainder(dividingBy: cycle)

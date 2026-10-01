@@ -157,7 +157,9 @@ private struct CompactTrailing: View {
     var body: some View {
         switch activity.payload {
         case .nowPlaying(let info):
-            Waveform(playing: info.isPlaying, color: env.nowPlaying.artworkColor.map(Color.init(nsColor:)) ?? .pink)
+            // Still while tucked under the notch, where it can't be seen.
+            Waveform(playing: info.isPlaying, color: env.nowPlaying.artworkColor.map(Color.init(nsColor:)) ?? .pink,
+                     animates: !model.isTucked)
         case .timer(let t):
             TimelineView(.periodic(from: .now, by: 1)) { ctx in
                 Text(IslandFormat.countdown(t.remaining(at: ctx.date)))
@@ -197,7 +199,8 @@ private struct BelowBand: View {
                 Text(info.title).lineLimit(1)
             }
             Spacer(minLength: 4)
-            Waveform(playing: info.isPlaying, color: env.nowPlaying.artworkColor.map(Color.init(nsColor:)) ?? .pink)
+            Waveform(playing: info.isPlaying, color: env.nowPlaying.artworkColor.map(Color.init(nsColor:)) ?? .pink,
+                     height: 12, animates: !model.isTucked)
         case .timer(let t):
             TimelineView(.periodic(from: .now, by: 1)) { ctx in
                 HStack(spacing: 8) {

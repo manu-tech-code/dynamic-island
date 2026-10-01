@@ -589,6 +589,13 @@ private struct ModulesPane: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
+            Toggle(isOn: $store.settings.nowPlaying.waveformFollowsAudio) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Waveform follows the music")
+                    Text("The bars move with what your Mac is playing. macOS asks for System Audio Recording permission and shows a purple dot by Control Center while the waveform is moving. The sound is only measured, never recorded or sent.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
             Toggle("Show the next track under the artist", isOn: $store.settings.nowPlaying.showUpNext)
             Toggle(isOn: $store.settings.nowPlaying.lyricsEnabled) {
                 VStack(alignment: .leading, spacing: 2) {

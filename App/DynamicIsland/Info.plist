@@ -39,6 +39,8 @@
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Dynamic Island reads Up Next and AirPlay speakers from Music, and track info from Spotify when the system Now Playing source is unavailable.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>Dynamic Island moves the waveform's bars with the music by measuring how loud it is. The sound is only measured, never recorded or sent anywhere.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Dynamic Island shows AirPods and other Bluetooth devices, with their batteries, when they connect.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>

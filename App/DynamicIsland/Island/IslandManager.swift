@@ -78,17 +78,17 @@ final class IslandManager {
     private func checkDragTowardNotch(at p: NSPoint) {
         let s = env.settings.settings
         guard !dragOpenedShelf, s[module: .shelf].enabled, s.shelf.openOnDrag else { return }
+        // Where the pointer is first: asking the pasteboard what's being dragged
+        // is a trip to another process, so only near the notch, not on every drag.
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(p) }),
+              p.y >= screen.frame.maxY - s.shelf.dragActivationDistance,
+              let c = controllers[Self.displayID(screen)],
+              abs(p.x - c.model.notch.rect.midX) <= IslandMetrics.shelf.width / 2 + 60 else { return }
         let pb = NSPasteboard(name: .drag)
         guard pb.changeCount != dragBaseline else { return }
         let types = Set(pb.types ?? [])
         let carries: [NSPasteboard.PasteboardType] = [.fileURL, .URL, .png, .tiff, .string]
-        guard !types.isDisjoint(with: carries),
-              let screen = NSScreen.screens.first(where: { $0.frame.contains(p) }),
-              let c = controllers[Self.displayID(screen)] else { return }
-        let notch = c.model.notch.rect
-        let nearTop = p.y >= screen.frame.maxY - s.shelf.dragActivationDistance
-        let nearNotch = abs(p.x - notch.midX) <= IslandMetrics.shelf.width / 2 + 60
-        guard nearTop, nearNotch else { return }
+        guard !types.isDisjoint(with: carries) else { return }
         dragOpenedShelf = true
         c.openShelfForDrag()
     }

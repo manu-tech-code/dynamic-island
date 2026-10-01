@@ -254,7 +254,8 @@ final class NowPlayingService: ActivityProvider {
             if artwork !== cache.image { artwork = cache.image; artworkColor = cache.color }
             return
         }
-        guard let data, let image = NSImage(data: data) else { return }
+        // Decoded at the most it's shown at (the open player), not the size it came in.
+        guard let data, let image = Thumbnail.image(data: data, maxPixels: 512) ?? NSImage(data: data) else { return }
         let color = ArtworkColor.dominant(in: image)
         artworkCache = (key, image, color)
         artwork = image

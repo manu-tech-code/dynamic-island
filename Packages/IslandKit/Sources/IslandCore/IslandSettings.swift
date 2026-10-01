@@ -158,6 +158,8 @@ public struct NowPlayingSettings: Codable, Equatable, Sendable {
     public var titleOnHover: Bool = true
     /// A new song shows its title for a moment, the island coming out if it's tucked.
     public var titleOnTrackChange: Bool = true
+    /// The waveform's bars follow the music (Core Audio tap; System Audio Recording permission).
+    public var waveformFollowsAudio: Bool = true
     public init() {}
 }
 
