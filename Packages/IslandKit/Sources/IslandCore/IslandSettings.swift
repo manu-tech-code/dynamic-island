@@ -215,12 +215,14 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     /// Width of the open island (expanded, dashboard, shelf), 0.75…1.35 × standard.
     public var openWidthScale: Double = 1
     /// Widest the compact island may get, in points; 0 means no limit. When
-    /// content won't fit, background app icons and extra activities fold into "+N".
+    /// content won't fit, background app icons and then extra activities leave it.
     public var compactMaxWidth: Double = 0
     public var dashboardButton: DashboardButtonMode = .always
     public var fullScreen: FullScreenBehavior = .hideWhenIdle
     /// On displays without a camera, draw the black virtual notch even when idle.
     public var virtualNotchWhenIdle: Bool = true
+    /// The lock opening on the island when the Mac unlocks.
+    public var lockIndicator: Bool = true
     public var hotKey: HotKeySpec = .default
 
     /// Per-module on/off and compact visibility, keyed by `ActivityKind.rawValue`.
@@ -303,7 +305,7 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case material, compactStyle, maxActivities, priority, openOnHover, hoverDelayMs, collapseOnMouseLeave
         case glowFromArtwork, displays, showMenuBarIcon, modules
-        case openWidthScale, compactMaxWidth, dashboardButton, fullScreen, virtualNotchWhenIdle, hotKey
+        case openWidthScale, compactMaxWidth, dashboardButton, fullScreen, virtualNotchWhenIdle, lockIndicator, hotKey
         case nowPlaying, backgroundApps, calendar, timers, battery, systemStats
         case shelf, downloads, devices, hud, weather, clipboard, shortcuts, privacy, dashboard
     }
@@ -335,6 +337,7 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         dashboardButton = v(.dashboardButton, d.dashboardButton)
         fullScreen = v(.fullScreen, d.fullScreen)
         virtualNotchWhenIdle = v(.virtualNotchWhenIdle, d.virtualNotchWhenIdle)
+        lockIndicator = v(.lockIndicator, d.lockIndicator)
         hotKey = c.tolerant(.hotKey, d.hotKey)
         modules = c.tolerant(.modules, [String: ModuleSettings]())
 
