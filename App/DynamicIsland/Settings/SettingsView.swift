@@ -808,7 +808,7 @@ private struct AboutPane: View {
             } header: {
                 Text("Updates")
             } footer: {
-                Text("Once a day, Dynamic Island looks at the latest release on GitHub. Updates are verified against your update key before they're installed, and your settings and permissions carry over.")
+                Text("Once a day, Dynamic Island checks for the latest update.")
             }
             .onAppear { automatic = env.updates.automaticallyChecks }
         }
