@@ -132,7 +132,8 @@ struct CompactAlertView: View {
 
     private func percent(_ p: Int, color: Color) -> some View {
         HStack(spacing: IslandMetrics.glyphSpacing) {
-            Text("\(p)%").monospacedDigit().foregroundStyle(color)
+            // One line always: "100%" mustn't wrap into "100" over "%".
+            Text("\(p)%").monospacedDigit().foregroundStyle(color).lineLimit(1).fixedSize()
             ring(p, color: color)
         }
     }

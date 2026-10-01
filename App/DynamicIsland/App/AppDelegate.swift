@@ -129,7 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ("airpods", .deviceConnected(pods), false), ("airpods-hover", .deviceConnected(pods), true),
                 ("oraimo", .deviceConnected(BluetoothDeviceInfo(id: "o", name: "oraimo SpaceBuds", kind: .earbuds,
                                                                  batteryLeft: 70, batteryRight: 18)), true),
-                ("charger", .chargerConnected(percent: 80), false), ("low", .lowBattery(percent: 9), false),
+                ("charger", .chargerConnected(percent: 100), false), ("low", .lowBattery(percent: 9), false),
                 ("disconnected", .deviceDisconnected(name: "AirPods Pro", kind: .airpodsPro), false)]
             let saved = env.settings.settings.compactStyle
             for style in CompactStyle.allCases {

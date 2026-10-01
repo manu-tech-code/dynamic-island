@@ -259,7 +259,7 @@ public enum IslandMetrics {
     /// ring (devices) or the percentage and a ring (power) on the right.
     public static func compactAlertContent(for style: IslandAlert.Style) -> CGFloat {
         switch style {
-        case .chargerConnected, .chargerDisconnected, .lowBattery: 34 + glyphSpacing + 18
+        case .chargerConnected, .chargerDisconnected, .lowBattery: 40 + glyphSpacing + 18 // "100%" and the ring
         default: glyph
         }
     }
