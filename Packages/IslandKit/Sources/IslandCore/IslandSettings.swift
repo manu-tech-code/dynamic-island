@@ -221,7 +221,7 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     public var fullScreen: FullScreenBehavior = .hideWhenIdle
     /// On displays without a camera, draw the black virtual notch even when idle.
     public var virtualNotchWhenIdle: Bool = true
-    /// A lock on the island while the Mac is locked, opening when it unlocks.
+    /// The lock opening on the island when the Mac unlocks.
     public var lockIndicator: Bool = true
     public var hotKey: HotKeySpec = .default
 

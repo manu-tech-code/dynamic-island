@@ -264,7 +264,7 @@ public enum IslandMetrics {
         }
     }
 
-    /// The lock indicator while the Mac is locked: a lock in the left ear.
+    /// The lock that opens when the Mac unlocks: a lock in the left ear.
     public static func lockSize(notch: CGSize) -> CGSize {
         CGSize(width: notch.width + 2 * (earOuterPadding + glyph + earInnerGap), height: notch.height)
     }

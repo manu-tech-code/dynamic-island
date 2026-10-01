@@ -146,7 +146,7 @@ private struct GeneralPane: View {
                     ForEach(FullScreenBehavior.allCases) { Text($0.displayName).tag($0) }
                 }
                 Toggle("Show the virtual notch on displays without a camera", isOn: $store.settings.virtualNotchWhenIdle)
-                Toggle("Show a lock on the island while the Mac is locked", isOn: $store.settings.lockIndicator)
+                Toggle("Show the lock opening on the island when you unlock", isOn: $store.settings.lockIndicator)
             } header: {
                 Text("Where it shows")
             } footer: {

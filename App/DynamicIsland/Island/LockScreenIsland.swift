@@ -2,10 +2,10 @@ import AppKit
 import IslandCore
 import SwiftUI
 
-/// The lock on the island while the Mac is locked, and the lock opening when
-/// it unlocks. It has its own panel, moved into a space above the lock screen,
-/// and it's display-only: it never takes clicks or the keyboard, so nothing
-/// can be done with the island on a locked Mac. Nothing else shows either.
+/// The lock opening on the island when the Mac unlocks. It's ready (in its own
+/// display-only panel, under the lock screen like every app window) while the
+/// Mac is locked; once the lock screen fades away, the closed lock opens, holds
+/// a beat, and goes back into the notch before the real island returns.
 final class LockScreenIsland {
     @Observable
     final class State {
@@ -22,7 +22,6 @@ final class LockScreenIsland {
     var onFinished: () -> Void = {}
     private let panel: NSPanel
     private var task: Task<Void, Never>?
-    private var adopted = false
 
     init(notch: NotchRect) {
         state = State(notch: notch)
@@ -53,16 +52,20 @@ final class LockScreenIsland {
         task?.cancel()
         if locked {
             panel.orderFrontRegardless()
-            if !adopted { LockScreenSpace.adopt(panel); adopted = true }
-            withAnimation(reduceMotion ? IslandMotion.reduced : IslandMotion.open) { state.phase = .locked }
+            var t = Transaction()
+            t.disablesAnimations = true // nobody sees it under the lock screen
+            withTransaction(t) { state.phase = .locked }
             return
         }
         guard state.phase == .locked else { return }
-        // Unlocked: the lock opens, holds a beat, then the island goes back into the notch.
-        withAnimation(reduceMotion ? IslandMotion.reduced : .spring(duration: 0.45, bounce: 0.25)) { state.phase = .unlocked }
+        // Unlocked: once the lock screen has faded, the closed lock opens, holds
+        // a beat, then the island goes back into the notch.
         task = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(900))
+            try? await Task.sleep(for: .milliseconds(350))
             guard !Task.isCancelled, let self else { return }
+            withAnimation(reduceMotion ? IslandMotion.reduced : .spring(duration: 0.45, bounce: 0.25)) { self.state.phase = .unlocked }
+            try? await Task.sleep(for: .milliseconds(900))
+            guard !Task.isCancelled else { return }
             withAnimation(reduceMotion ? IslandMotion.reduced : IslandMotion.close) { self.state.phase = .hidden }
             try? await Task.sleep(for: .milliseconds(550))
             guard !Task.isCancelled else { return }
