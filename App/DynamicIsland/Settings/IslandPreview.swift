@@ -130,7 +130,8 @@ private struct Wallpaper: View {
         .clipped()
         .onAppear {
             guard image == nil, let screen = NSScreen.main, let url = NSWorkspace.shared.desktopImageURL(for: screen) else { return }
-            image = NSImage(contentsOf: url)
+            // The preview is 760 pt wide: no need to decode a 6K picture.
+            image = Thumbnail.image(at: url, maxPixels: 1800)
         }
     }
 }

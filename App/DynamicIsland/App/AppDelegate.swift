@@ -187,6 +187,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
             }
+        case "debug-layers":
+            // The Core Animation views on screen: where they are, and whether they're moving.
+            func walk(_ v: NSView, in w: NSWindow) {
+                if v is WaveformLayerView || v is AnimatedImageView {
+                    let f = v.convert(v.bounds, to: nil)
+                    let moving = (v.layer?.sublayers ?? []).flatMap { $0.animationKeys() ?? [] }
+                    let bars = (v.layer?.sublayers ?? []).map { "\(Int($0.frame.width))×\(Int($0.frame.height))" }.joined(separator: " ")
+                    let color = (v.layer?.sublayers?.first?.backgroundColor).map { "\($0.components ?? [])" } ?? "-"
+                    Log.info("layers: \(type(of: v)) at \(Int(f.minX)),\(Int(w.frame.height - f.maxY)) \(Int(f.width))×\(Int(f.height)) alpha \(v.alphaValue) hidden \(v.isHiddenOrHasHiddenAncestor) moving \(moving) [\(bars)] colour \(color)")
+                }
+                v.subviews.forEach { walk($0, in: w) }
+            }
+            for w in NSApp.windows where w.isVisible { if let v = w.contentView { walk(v, in: w) } }
         case "debug-render-goo":
             // The bubbles and the drop at a few points of coming out of the notch.
             let r = ImageRenderer(content: PlayingIndicatorFrames())

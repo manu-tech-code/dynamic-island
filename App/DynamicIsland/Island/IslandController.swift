@@ -60,6 +60,8 @@ final class IslandController: NSObject {
     private var leaveTask: Task<Void, Never>?
     private var revealTask: Task<Void, Never>?
     private var concealTask: Task<Void, Never>?
+    /// The pointer was over the island's panel at the last move.
+    private var pointerWasNear = true
     /// The song last seen, so a new one can show its title.
     private var lastTrack: String?
     private var scrollAccumulated: CGFloat = 0
@@ -191,6 +193,11 @@ final class IslandController: NSObject {
 
     func pointerMoved(to p: NSPoint) {
         guard !env.lock.isLocked else { return }
+        // Most moves are nowhere near the island (it never leaves its panel):
+        // after the first one out there, which settles hover and reveal, skip them.
+        let near = p.y >= screenTop - Self.panelSize.height && abs(p.x - model.notch.rect.midX) <= Self.panelSize.width / 2
+        defer { pointerWasNear = near }
+        guard near || pointerWasNear else { return }
         if model.hidesUntilHover { updateReveal(at: p) }
         let now = contains(p)
         if panel.ignoresMouseEvents == now { panel.ignoresMouseEvents = !now }
