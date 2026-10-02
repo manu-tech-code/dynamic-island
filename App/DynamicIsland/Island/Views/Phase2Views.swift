@@ -19,6 +19,11 @@ struct Phase2Leading: View {
                 if p.microphone { Image(systemName: "mic.fill").foregroundStyle(.orange) }
                 if p.camera { Image(systemName: "video.fill").foregroundStyle(.green) }
             }
+        case .messages(let apps):
+            // Up to two apps' icons with their unread counts.
+            HStack(spacing: IslandMetrics.glyphSpacing) {
+                ForEach(apps.prefix(2)) { UnreadBadgeIcon(app: $0) }
+            }
         default:
             EmptyView()
         }
@@ -44,6 +49,10 @@ struct Phase2Trailing: View {
                 if p.microphone { Circle().fill(.orange).frame(width: 7, height: 7) }
                 if p.camera { Circle().fill(.green).frame(width: 7, height: 7) }
             }
+        case .messages(let apps):
+            let total = apps.reduce(0) { $0 + $1.count }
+            Text(total > 99 ? "99+" : "\(total)").font(.system(size: 11, weight: .bold)).monospacedDigit()
+                .padding(.horizontal, 6).frame(minHeight: 16).background(Capsule().fill(.red)).foregroundStyle(.white)
         default:
             EmptyView()
         }
@@ -69,6 +78,11 @@ struct Phase2Band: View {
             Phase2Leading(payload: payload)
             Text(p.microphone && p.camera ? "Mic and camera in use" : p.microphone ? "Microphone in use" : "Camera in use").lineLimit(1)
             Spacer(minLength: 4)
+        case .messages(let apps):
+            Phase2Leading(payload: payload)
+            Text(apps.count == 1 ? "\(apps[0].lastSender) · \(apps[0].app)" : "Unread in \(apps.count) apps").lineLimit(1)
+            Spacer(minLength: 4)
+            Phase2Trailing(payload: payload)
         default:
             EmptyView()
         }
@@ -83,6 +97,8 @@ struct Phase2Glyph: View {
         case .shelf: Image(systemName: "tray.full.fill").foregroundStyle(.teal).frame(width: 20, height: 20)
         case .download(let d): DownloadRing(fraction: d.fraction, size: 16).frame(width: 20, height: 20)
         case .privacy(let p): Circle().fill(p.camera ? Color.green : .orange).frame(width: 8, height: 8).frame(width: 20, height: 20)
+        // Inside the glyph's own button (which opens the list), so not a button itself.
+        case .messages(let apps): if let first = apps.first { UnreadBadgeIcon(app: first, size: 18, opens: false).frame(width: 20, height: 20) }
         default: EmptyView()
         }
     }

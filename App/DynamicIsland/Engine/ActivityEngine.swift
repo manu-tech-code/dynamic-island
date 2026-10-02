@@ -50,7 +50,12 @@ final class ActivityEngine {
         case .message, .updateAvailable: break // not tied to a module
         default: guard settings.settings[module: alert.kind].enabled else { return }
         }
-        Log.info("alert \(alert.style)")
+        // A message is never written to the log, only where it came from.
+        if case .messages(let list, let style) = alert.style {
+            Log.info("alert: \(list.count) message(s) from \(list.first?.app ?? "?") as \(style.rawValue)")
+        } else {
+            Log.info("alert \(alert.style)")
+        }
         queue.append(alert)
         if self.alert == nil { showNext() }
     }
@@ -76,6 +81,21 @@ final class ActivityEngine {
             guard !Task.isCancelled else { return }
             self?.showNext()
         }
+    }
+
+    /// A message arrived. If one is showing, the new one takes its place at once
+    /// (Stack keeps the others under it) instead of waiting its turn; other
+    /// alerts finish first.
+    func showMessage(_ message: MessageInfo, style: MessageAlertStyle, hold: TimeInterval) {
+        guard settings.settings[module: .messages].enabled else { return }
+        if let current = alert, case .messages(let list, _) = current.style {
+            let messages = style == .stack ? Array(([message] + list).prefix(6)) : [message]
+            // The same alert, so the island updates in place instead of closing and opening again.
+            alert = IslandAlert(id: current.id, kind: .messages, style: .messages(messages, style), holdSeconds: hold)
+            scheduleDismiss(after: hold)
+            return
+        }
+        post(IslandAlert(kind: .messages, style: .messages([message], style), holdSeconds: hold))
     }
 
     func dismissAlert() {

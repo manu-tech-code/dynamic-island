@@ -559,6 +559,7 @@ private struct ModulesPane: View {
         case .privacy: "Shows when an app is using your microphone or a camera"
         case .devices: "AirPods and Bluetooth devices connecting, with their batteries"
         case .hud: "A volume and brightness HUD on the island instead of the system one"
+        case .messages: "New messages from WhatsApp, Slack, Mail, Messages, Teams or any app, on the island"
         }
     }
 
@@ -643,6 +644,7 @@ private struct ModulesPane: View {
             Toggle("Camera", isOn: $store.settings.privacy.showCamera)
         case .devices: DevicesModuleSettings()
         case .hud: HUDModuleSettings()
+        case .messages: MessagesModuleSettings()
         case .backgroundApps:
             Stepper(value: $store.settings.backgroundApps.maxIcons, in: 1...24) {
                 LabeledContent("Icons on the compact island", value: "\(store.settings.backgroundApps.maxIcons)")

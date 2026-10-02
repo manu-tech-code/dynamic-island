@@ -88,6 +88,7 @@ public enum IslandMetrics {
         case .shelf: (glyph, glyph)                                    // tray | count
         case .download: (glyph, 38)                                    // ring | "100%"
         case .privacy(let p): (p.microphone && p.camera ? 36 : glyph, 18)
+        case .messages(let apps): (iconRowWidth(count: min(2, apps.count)), 26)  // app icons | unread count
         }
     }
 
@@ -249,6 +250,7 @@ public enum IslandMetrics {
         case .privacy: CGSize(width: 400, height: 112)
         case .devices: CGSize(width: 460, height: 150)
         case .hud: CGSize(width: 420, height: 100)
+        case .messages: CGSize(width: 440, height: 150)
         }
     }
 
@@ -260,6 +262,7 @@ public enum IslandMetrics {
     public static func compactAlertContent(for style: IslandAlert.Style) -> CGFloat {
         switch style {
         case .chargerConnected, .chargerDisconnected, .lowBattery: 40 + glyphSpacing + 18 // "100%" and the ring
+        case .messages(_, .ticker): tickerEar                                             // the sender | the message
         default: glyph
         }
     }
@@ -339,9 +342,20 @@ public enum IslandMetrics {
         case .eventStarting: return CGSize(width: 460, height: 100)
         case .downloadFinished: return CGSize(width: 460, height: 88)
         case .message: return CGSize(width: 440, height: 88)
+        case .messages(let list, .stack): return CGSize(width: 380, height: 84 + 6 * CGFloat(min(2, max(0, list.count - 1))))
+        case .messages: return messageCard
         default: return CGSize(width: 400, height: 88)
         }
     }
+
+    // MARK: messages
+
+    /// A message as a card: the app in the ears, the sender and two lines, Open.
+    public static let messageCard = CGSize(width: 380, height: 118)
+    /// The ticker's ears: the sender on the left, the message scrolling on the right.
+    public static let tickerEar: CGFloat = 112
+    /// A stack, fanned out on hover: the ears, then a row per message.
+    public static func messageListHeight(count: Int) -> CGFloat { 32 + CGFloat(count) * 30 + 8 }
 
     /// Bottom corner radius. Larger shapes get rounder corners so inner
     /// content can stay concentric (inner radius = outer − padding).
