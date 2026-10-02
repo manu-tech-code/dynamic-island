@@ -190,6 +190,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "debug-ax-banner":
             if query["windows"] != nil { Log.info("ax windows: " + AXDump.windows()) }
             else if query["actions"] != nil { Log.info("ax actions:\n" + AXDump.bannerActions()) }
+            else if query["anatomy"] != nil { Log.info("ax anatomy:\n" + AXDump.bannerAnatomy()) }
+            else if query["settable"] != nil { Log.info("ax settable:\n" + AXDump.settable()) }
+            else if query["bannertree"] != nil { Log.info("ax banner tree:\n" + AXDump.notificationCenter()) }
+            else if let y = query["move"] { Log.info("ax move: " + AXDump.moveBannerWindow(y: y == "where" ? nil : CGFloat(Double(y) ?? 0))) }
             else if let name = query["perform"] { Log.info("ax perform " + AXDump.perform(name)) }
             else if let text = query["history"] { Task { Log.info("ax history: " + (await AXDump.historyContains(text))) } }
             else if let text = query["clear"] { Task { Log.info("ax clear: " + (await AXDump.historyContains(text, clearing: true))) } }
@@ -272,10 +276,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let img = r.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
                 try? rep.representation(using: .png, properties: [:])?.write(to: Log.fileURL.deletingLastPathComponent().appendingPathComponent("badge.png"))
             }
+        case "debug-message-open":
+            // Opens the latest message, as clicking it on the island does.
+            if let m = env.messages.lastMessage { env.messages.open(m) } else { Log.info("messages: nothing to open") }
         case "debug-message-style":
             // dynamicisland://debug-message-style?style=card|ears|ticker|stack|badges&forget=<app>
             if let style = query["style"].flatMap(MessageAlertStyle.init(rawValue:)) { env.settings.settings.messages.style = style }
             if let app = query["forget"] { env.settings.settings.messages.apps[app] = nil }
+            if let hide = query["hide"] { env.settings.settings.messages.hideSystemBanner = hide == "1" }
+            if let app = query["off"] { env.settings.settings.messages.apps[app] = false }
+            if let app = query["on"] { env.settings.settings.messages.apps[app] = true }
             Log.info("messages: style \(env.settings.settings.messages.style.rawValue), unread \(env.messages.unread.map { "\($0.app) \($0.count)" }), apps \(env.messages.appList().map { "\($0) \(env.settings.settings.messages.shows(app: $0) ? "on" : "off")" })")
         case "debug-render-messages":
             // Each message style, and their hover states, beside the notch.

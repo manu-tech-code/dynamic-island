@@ -327,7 +327,7 @@ struct MessagesModuleSettings: View {
         Toggle(isOn: $store.settings.messages.hideSystemBanner) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Hide macOS's banner")
-                Text("Messages show once, on the island: macOS's own banner is closed as it appears, for the apps switched on below. That also takes them out of Notification Center's list, and Open goes to the app rather than the conversation.")
+                Text("Messages show once, on the island, for the apps switched on below: macOS's own banner is kept out of sight instead. They still go into Notification Center's list, and Open goes straight to the conversation. Alerts that wait for an answer come back after a few seconds.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }

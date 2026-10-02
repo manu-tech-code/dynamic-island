@@ -18,9 +18,6 @@ final class MessageAlertsService: ActivityProvider {
     @ObservationIgnored private let settings: SettingsStore
     @ObservationIgnored private let engine: ActivityEngine
     @ObservationIgnored private let reader = NotificationBannerReader()
-    /// The banners behind recent messages, to open their conversations.
-    @ObservationIgnored private var banners: [String: AXUIElement] = [:]
-    @ObservationIgnored private var bannerOrder: [String] = []
     @ObservationIgnored private var icons: [String: NSImage] = [:]
     @ObservationIgnored private var trustPoll: Task<Void, Never>?
 
@@ -29,6 +26,12 @@ final class MessageAlertsService: ActivityProvider {
         self.engine = engine
         engine.register(self)
         reader.onBanner = { [weak self] banner in self?.received(banner) }
+        // macOS's own banner stays out of sight for the apps the island shows ("" asks: for any app?).
+        reader.hidesBanner = { [settings] app in
+            let s = settings.settings
+            guard s[module: .messages].enabled, s.messages.hideSystemBanner else { return false }
+            return app.isEmpty || s.messages.shows(app: app)
+        }
         // Opening an app reads its messages: its badge goes.
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] note in
             let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
@@ -43,8 +46,15 @@ final class MessageAlertsService: ActivityProvider {
 
     func start() {
         whenChanged({ [settings] in settings.settings[module: .messages].enabled }) { [weak self] on in self?.update(on) }
+        // Hiding turned on or off, or an app switched: macOS's banner window follows.
+        whenChanged({ [settings] in "\(settings.settings.messages.hideSystemBanner) \(settings.settings.messages.apps.sorted { $0.key < $1.key })" }) { [weak self] _ in
+            self?.reader.refresh()
+        }
         update(settings.settings[module: .messages].enabled)
     }
+
+    /// Quitting: macOS's banners go back on screen.
+    func stop() { reader.stop() }
 
     private func update(_ enabled: Bool) {
         trusted = AXIsProcessTrusted()
@@ -93,12 +103,6 @@ final class MessageAlertsService: ActivityProvider {
         let message = MessageInfo(id: banner.id, app: banner.appName, bundleID: bundleID,
                                   sender: banner.title.isEmpty ? banner.appName : banner.title,
                                   context: banner.subtitle, text: banner.body)
-        // Once, on the island: macOS's banner goes before it's really on screen.
-        if s.messages.hideSystemBanner, NotificationBannerReader.close(banner) {
-            Log.info("messages: closed macOS's banner")
-        } else {
-            remember(banner)
-        }
         show(message, style: s.messages.style)
     }
 
@@ -109,14 +113,11 @@ final class MessageAlertsService: ActivityProvider {
         // The ticker stays until the message has scrolled by.
         let hold = style == .ticker ? max(s.messages.holdSeconds, 3 + Double(message.text.count) * 0.09) : s.messages.holdSeconds
         if style == .badges { count(message) }
+        #if DEBUG
+        lastMessage = message
+        #endif
         Log.info("messages: \(message.app) (\(style.rawValue))")
         engine.showMessage(message, style: style, hold: hold)
-    }
-
-    private func remember(_ banner: NotificationBannerReader.Banner) {
-        banners[banner.id] = banner.element
-        bannerOrder.append(banner.id)
-        if bannerOrder.count > 20 { banners[bannerOrder.removeFirst()] = nil }
     }
 
     private func count(_ message: MessageInfo) {
@@ -134,15 +135,18 @@ final class MessageAlertsService: ActivityProvider {
 
     // MARK: opening
 
-    /// Opens the message's conversation: pressing its banner if macOS still has
-    /// it (that goes straight to the chat), or else the app.
+    /// Opens the message's conversation, as clicking macOS's notification would:
+    /// its banner while it's up (even out of sight), or else its entry in
+    /// Notification Center. Only if neither is there, the app.
     func open(_ message: MessageInfo) {
-        if let banner = banners[message.id], AXUIElementPerformAction(banner, kAXPressAction as CFString) == .success {
-            Log.info("messages: opened from the banner")
-        } else {
-            openApp(name: message.app, bundleID: message.bundleID)
-        }
         clear(name: message.app, bundleID: message.bundleID)
+        Task {
+            if await reader.open(id: message.id) {
+                Log.info("messages: opened the conversation")
+            } else {
+                openApp(name: message.app, bundleID: message.bundleID)
+            }
+        }
     }
 
     func openApp(name: String, bundleID: String?) {
@@ -155,6 +159,10 @@ final class MessageAlertsService: ActivityProvider {
     }
 
     func clearAll() { unread = [] }
+
+    #if DEBUG
+    @ObservationIgnored var lastMessage: MessageInfo?
+    #endif
 
     private func clear(name: String?, bundleID: String?) {
         guard !unread.isEmpty else { return }
@@ -171,8 +179,13 @@ final class MessageAlertsService: ActivityProvider {
             guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) else { return nil }
             return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
         }
-        return Set(settings.settings.messages.apps.keys).union(installed)
-            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        let seen = Set(settings.settings.messages.apps.keys)
+        // Banners use the short name ("Teams"), the app file the long one
+        // ("Microsoft Teams"): list it once, as its banners name it.
+        let extra = installed.map(Self.clean).filter { name in
+            !seen.contains { $0 == name || name.hasSuffix(" " + $0) || $0.hasSuffix(" " + name) }
+        }
+        return seen.union(extra).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 
     /// The app's icon, for the island.
@@ -184,6 +197,12 @@ final class MessageAlertsService: ActivityProvider {
         let icon = NSWorkspace.shared.icon(forFile: url.path)
         icons[app] = icon
         return icon
+    }
+
+    /// Without the invisible marks some apps put in their names (WhatsApp's starts with one).
+    private static func clean(_ name: String) -> String {
+        name.unicodeScalars.filter { !["\u{200E}", "\u{200F}", "\u{202A}", "\u{202C}"].contains($0) }
+            .map(String.init).joined().trimmingCharacters(in: .whitespaces)
     }
 
     private static func runningApp(named name: String) -> NSRunningApplication? {

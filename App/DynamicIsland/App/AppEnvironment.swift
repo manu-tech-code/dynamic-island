@@ -96,5 +96,7 @@ final class AppEnvironment {
     func stop() {
         nowPlaying.stop()
         downloads.stop()
+        // macOS's banners back on screen before the app goes.
+        messages.stop()
     }
 }

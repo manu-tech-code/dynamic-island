@@ -29,10 +29,18 @@ enum AXDump {
         }.joined(separator: "\n")
     }
 
-    /// Performs the named action (its "Name:…" form) on the newest banner.
+    /// Performs the named action (its "Name:…" form) on the newest banner, or a
+    /// scroll on the scroll area holding it (`scroll:AXScrollRightByPage`).
     static func perform(_ named: String) -> String {
         guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.notificationcenterui").first,
               let b = NotificationBannerReader.banners(pid: app.processIdentifier).last else { return "no banner" }
+        if named.hasPrefix("scroll:") {
+            var parent: CFTypeRef?
+            AXUIElementCopyAttributeValue(b.element, kAXParentAttribute as CFString, &parent)
+            guard let area = parent else { return "no parent" }
+            let action = String(named.dropFirst(7))
+            return "\(action) on \(string(area as! AXUIElement, kAXRoleAttribute)): \(AXUIElementPerformAction(area as! AXUIElement, action as CFString).rawValue)"
+        }
         var names: CFArray?
         AXUIElementCopyActionNames(b.element, &names)
         guard let action = ((names as? [String]) ?? []).first(where: { $0.contains("Name:\(named)") || $0 == named }) else { return "no action \(named)" }
@@ -53,6 +61,61 @@ enum AXDump {
         guard what.lowercased().contains("clock") || string(clock, kAXIdentifierAttribute).contains("menuextra") else { return "not the clock: " + what }
         AXUIElementPerformAction(clock, kAXPressAction as CFString)
         try? await Task.sleep(for: .milliseconds(900))
+        if text == "-ids", let nc = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.notificationcenterui").first {
+            var rows: [String] = []
+            func walk(_ e: AXUIElement, _ depth: Int) {
+                guard depth < 12 else { return }
+                if string(e, kAXSubroleAttribute).hasPrefix("AXNotificationCenter") {
+                    var names: CFArray?
+                    AXUIElementCopyActionNames(e, &names)
+                    rows.append("\(string(e, kAXSubroleAttribute)) id=\(string(e, kAXIdentifierAttribute)) \"\(string(e, kAXDescriptionAttribute).prefix(50))\" actions=\(((names as? [String]) ?? []).map { $0.components(separatedBy: "\n").first ?? $0 })")
+                }
+                for c in children(e, kAXChildrenAttribute) { walk(c, depth + 1) }
+            }
+            for w in children(AXUIElementCreateApplication(nc.processIdentifier), kAXWindowsAttribute) where string(w, kAXSubroleAttribute) == "AXSystemDialog" { walk(w, 0) }
+            AXUIElementPerformAction(clock, kAXPressAction as CFString)
+            return "list:\n" + rows.joined(separator: "\n")
+        }
+        if text == "-tree", let nc = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.notificationcenterui").first {
+            var rows: [String] = []
+            func walk(_ e: AXUIElement, _ depth: Int) {
+                guard depth < 5 else { return }
+                var size: CFTypeRef?
+                AXUIElementCopyAttributeValue(e, kAXSizeAttribute as CFString, &size)
+                var s = CGSize.zero
+                if let size { AXValueGetValue(size as! AXValue, .cgSize, &s) }
+                rows.append(String(repeating: "  ", count: depth) + "\(string(e, kAXRoleAttribute))/\(string(e, kAXSubroleAttribute)) id=\(string(e, kAXIdentifierAttribute).prefix(40)) desc=\(string(e, kAXDescriptionAttribute).prefix(30)) \(Int(s.width))×\(Int(s.height))")
+                for c in children(e, kAXChildrenAttribute).prefix(4) { walk(c, depth + 1) }
+            }
+            for w in children(AXUIElementCreateApplication(nc.processIdentifier), kAXWindowsAttribute) where string(w, kAXSubroleAttribute) == "AXSystemDialog" { walk(w, 0) }
+            AXUIElementPerformAction(clock, kAXPressAction as CFString)
+            return "panel tree:\n" + rows.joined(separator: "\n")
+        }
+        if text.hasPrefix("-where:"), let nc = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.notificationcenterui").first {
+            // Where the notification with this title sits in the list, and its parents.
+            let title = String(text.dropFirst(7))
+            try? await Task.sleep(for: .milliseconds(400))
+            var out = "not in the list"
+            func walk(_ e: AXUIElement, _ path: [String], _ depth: Int) {
+                guard depth < 12 else { return }
+                let me = "\(string(e, kAXRoleAttribute))/\(string(e, kAXSubroleAttribute)) id=\(string(e, kAXIdentifierAttribute).prefix(36))"
+                if string(e, kAXDescriptionAttribute).contains(title), string(e, kAXSubroleAttribute) == "AXNotificationCenterBanner" {
+                    var names: CFArray?
+                    AXUIElementCopyActionNames(e, &names)
+                    out = (path + [me]).joined(separator: "\n  ↳ ") + "\n  actions \(((names as? [String]) ?? []).map { $0.components(separatedBy: "\n").first ?? $0 })"
+                    return
+                }
+                for c in children(e, kAXChildrenAttribute) { walk(c, path + [me], depth + 1) }
+            }
+            for w in children(AXUIElementCreateApplication(nc.processIdentifier), kAXWindowsAttribute) where string(w, kAXSubroleAttribute) == "AXSystemDialog" { walk(w, [], 0) }
+            AXUIElementPerformAction(clock, kAXPressAction as CFString)
+            return "where:\n" + out
+        }
+        if text == "-windows" {
+            let windows = windows()
+            AXUIElementPerformAction(clock, kAXPressAction as CFString)
+            return "with the panel open: " + windows
+        }
         var all = ""
         if let nc = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.notificationcenterui").first {
             for w in children(AXUIElementCreateApplication(nc.processIdentifier), kAXWindowsAttribute) where string(w, kAXSubroleAttribute) == "AXSystemDialog" {
@@ -92,6 +155,73 @@ enum AXDump {
         var v: CFTypeRef?
         guard AXUIElementCopyAttributeValue(e, key as CFString, &v) == .success else { return [] }
         return v as? [AXUIElement] ?? []
+    }
+
+    /// Moves Notification Center's banner window (the AXSystemDialog one) to `y`, and reports where it is.
+    static func moveBannerWindow(y: CGFloat?) -> String {
+        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.notificationcenterui").first else { return "-" }
+        guard let w = children(AXUIElementCreateApplication(app.processIdentifier), kAXWindowsAttribute).first(where: { string($0, kAXSubroleAttribute) == "AXSystemDialog" }) else { return "no banner window" }
+        var result = ""
+        if let y {
+            var point = CGPoint(x: 0, y: y)
+            let value = AXValueCreate(.cgPoint, &point)!
+            result = "set \(AXUIElementSetAttributeValue(w, kAXPositionAttribute as CFString, value).rawValue); "
+        }
+        var v: CFTypeRef?
+        AXUIElementCopyAttributeValue(w, kAXPositionAttribute as CFString, &v)
+        var p = CGPoint.zero
+        if let v { AXValueGetValue(v as! AXValue, .cgPoint, &p) }
+        return result + "window at \(Int(p.x)),\(Int(p.y))"
+    }
+
+    /// Which of the banner's (and its window's) attributes another app may change.
+    static func settable() -> String {
+        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.notificationcenterui").first,
+              let b = NotificationBannerReader.banners(pid: app.processIdentifier).last else { return "no banner" }
+        var out: [String] = []
+        var e: AXUIElement? = b.element
+        var level = 0
+        while let el = e, level < 5 {
+            var names: CFArray?
+            AXUIElementCopyAttributeNames(el, &names)
+            let writable = ((names as? [String]) ?? []).filter { name in
+                var ok = DarwinBoolean(false)
+                return AXUIElementIsAttributeSettable(el, name as CFString, &ok) == .success && ok.boolValue
+            }
+            out.append("level \(level) \(string(el, kAXRoleAttribute))/\(string(el, kAXSubroleAttribute)): \(writable)")
+            var parent: CFTypeRef?
+            e = AXUIElementCopyAttributeValue(el, kAXParentAttribute as CFString, &parent) == .success ? (parent as! AXUIElement) : nil
+            level += 1
+        }
+        return out.joined(separator: "\n")
+    }
+
+    /// Every attribute and action of the newest banner and each element above it.
+    static func bannerAnatomy() -> String {
+        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.notificationcenterui").first,
+              let b = NotificationBannerReader.banners(pid: app.processIdentifier).last else { return "no banner" }
+        var out = ""
+        var e: AXUIElement? = b.element
+        var level = 0
+        while let el = e, level < 6 {
+            out += "— level \(level): \(string(el, kAXRoleAttribute))/\(string(el, kAXSubroleAttribute))\n"
+            var names: CFArray?
+            AXUIElementCopyAttributeNames(el, &names)
+            for name in (names as? [String]) ?? [] where name != kAXChildrenAttribute && name != "AXChildrenInNavigationOrder" {
+                var v: CFTypeRef?
+                AXUIElementCopyAttributeValue(el, name as CFString, &v)
+                var text = v.map { "\($0)" } ?? "nil"
+                if text.count > 140 { text = String(text.prefix(140)) + "…" }
+                out += "   \(name) = \(text.replacingOccurrences(of: "\n", with: " "))\n"
+            }
+            var actions: CFArray?
+            AXUIElementCopyActionNames(el, &actions)
+            out += "   actions: \(((actions as? [String]) ?? []).map { $0.components(separatedBy: "\n").first ?? $0 })\n"
+            var parent: CFTypeRef?
+            e = AXUIElementCopyAttributeValue(el, kAXParentAttribute as CFString, &parent) == .success ? (parent as! AXUIElement) : nil
+            level += 1
+        }
+        return out
     }
 
     /// Just the windows: title, subrole, size.
