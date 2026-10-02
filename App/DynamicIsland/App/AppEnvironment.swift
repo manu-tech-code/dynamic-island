@@ -21,6 +21,7 @@ final class AppEnvironment {
     let downloads: DownloadsService
     let privacy: PrivacyIndicatorService
     let devices: DevicesService
+    let messages: MessageAlertsService
     let hud: HUDService
     let weather: WeatherService
     let clipboard: ClipboardService
@@ -50,6 +51,7 @@ final class AppEnvironment {
         downloads = DownloadsService(settings: settings, engine: engine)
         privacy = PrivacyIndicatorService(settings: settings)
         devices = DevicesService(settings: settings, engine: engine)
+        messages = MessageAlertsService(settings: settings, engine: engine)
         hud = HUDService(settings: settings, engine: engine, audio: audioOutput)
         weather = WeatherService(settings: settings)
         clipboard = ClipboardService(settings: settings)
@@ -68,6 +70,7 @@ final class AppEnvironment {
         backgroundApps.start()
         audioOutput.start()
         hud.start()
+        messages.start()
         fullScreen.start()
         lock.start()
         updates.start()

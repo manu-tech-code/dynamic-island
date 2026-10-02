@@ -5,6 +5,8 @@ import Foundation
 public enum ActivityKind: String, Codable, CaseIterable, Sendable, Identifiable {
     case nowPlaying, timer, calendar, battery, backgroundApps
     case shelf, downloads, privacy, devices, hud
+    /// Messages from any app, read from macOS's notification banners.
+    case messages
 
     public var id: String { rawValue }
 
@@ -20,6 +22,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable, Identifiable 
         case .privacy: "Mic and camera"
         case .devices: "AirPods and Bluetooth"
         case .hud: "Volume and brightness"
+        case .messages: "Messages"
         }
     }
 
@@ -35,6 +38,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable, Identifiable 
         case .privacy: "mic.fill"
         case .devices: "airpodspro"
         case .hud: "speaker.wave.2.fill"
+        case .messages: "message.fill"
         }
     }
 
@@ -52,8 +56,12 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable, Identifiable 
         }
     }
 
+    /// Kinds added after people had saved their priority lists, and the kind
+    /// each goes after in an older list.
+    public static let addedAfter: [ActivityKind: ActivityKind] = [.messages: .timer]
+
     public static let defaultPriority: [ActivityKind] = [
-        .calendar, .nowPlaying, .timer, .downloads, .privacy, .battery, .shelf, .backgroundApps,
+        .calendar, .nowPlaying, .timer, .messages, .downloads, .privacy, .battery, .shelf, .backgroundApps,
     ]
 }
 
@@ -348,6 +356,8 @@ public enum ActivityPayload: Equatable, Sendable {
     case shelf([ShelfItemInfo])
     case download(DownloadInfo)
     case privacy(PrivacyInfo)
+    /// Unread messages, per app (the badges style).
+    case messages([UnreadApp])
 }
 
 /// Something live that competes for space on the island.
@@ -381,6 +391,8 @@ public struct IslandAlert: Identifiable, Equatable, Sendable {
         case message(title: String, subtitle: String, symbol: String)
         /// A newer version was found by the daily check; Install opens Sparkle.
         case updateAvailable(version: String)
+        /// Messages from another app, newest first, in the style chosen in Settings.
+        case messages([MessageInfo], MessageAlertStyle)
     }
 
     /// Status alerts show like a compact activity (an icon on the left, a ring on
@@ -388,6 +400,7 @@ public struct IslandAlert: Identifiable, Equatable, Sendable {
     public var isCompact: Bool {
         switch style {
         case .deviceConnected, .deviceDisconnected, .chargerConnected, .chargerDisconnected, .lowBattery: true
+        case .messages(_, let style): style.isCompact
         default: false
         }
     }

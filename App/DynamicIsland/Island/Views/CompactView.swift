@@ -143,7 +143,7 @@ private struct CompactLeading: View {
             Image(systemName: "battery.25percent").foregroundStyle(.red)
         case .backgroundApps:
             EmptyView() // its icons are placed by the ears
-        case .shelf, .download, .privacy:
+        case .shelf, .download, .privacy, .messages:
             Phase2Leading(payload: activity.payload)
         }
     }
@@ -175,7 +175,7 @@ private struct CompactTrailing: View {
             Text("\(b.percent)%").monospacedDigit().foregroundStyle(.red)
         case .backgroundApps:
             EmptyView() // its icons are placed by the ears
-        case .shelf, .download, .privacy:
+        case .shelf, .download, .privacy, .messages:
             Phase2Trailing(payload: activity.payload)
         }
     }
@@ -227,7 +227,7 @@ private struct BelowBand: View {
             Spacer(minLength: 0)
             AppIconRow(apps: Array(apps.prefix(model.compactFit.iconLimit)))
             Spacer(minLength: 0)
-        case .shelf, .download, .privacy:
+        case .shelf, .download, .privacy, .messages:
             Phase2Band(payload: activity.payload)
         }
     }
@@ -319,7 +319,7 @@ private struct SecondaryGlyphs: View {
             } else {
                 Image(systemName: "app.dashed").frame(width: 20, height: 20)
             }
-        case .shelf, .download, .privacy:
+        case .shelf, .download, .privacy, .messages:
             Phase2Glyph(payload: a.payload)
         }
     }

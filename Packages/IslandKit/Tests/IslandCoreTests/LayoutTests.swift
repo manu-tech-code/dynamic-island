@@ -22,6 +22,7 @@ import Testing
         case .shelf: .shelf
         case .download: .downloads
         case .privacy: .privacy
+        case .messages: .messages
         }
     }
 

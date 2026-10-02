@@ -7,7 +7,9 @@ struct AlertView: View {
     let model: IslandViewModel
 
     var body: some View {
-        if alert.isHUD {
+        if case .messages(let messages, let style) = alert.style, !messages.isEmpty {
+            MessageAlertView(messages: messages, style: style, model: model)
+        } else if alert.isHUD {
             HUDView(style: alert.style, model: model)
         } else if alert.isCompact {
             CompactAlertView(alert: alert, model: model)
@@ -58,6 +60,8 @@ struct AlertView: View {
             titles(title, subtitle)
             Spacer()
             DashboardButton(model: model, size: 28)
+        case .messages:
+            EmptyView() // drawn by MessageAlertView
         case .updateAvailable(let version):
             symbol("arrow.down.circle.fill", Color.accentColor)
             titles("Update available", "Dynamic Island \(version)")

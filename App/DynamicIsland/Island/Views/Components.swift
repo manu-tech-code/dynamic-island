@@ -247,6 +247,7 @@ extension ActivityKind {
         case .privacy: .orange
         case .devices: .indigo
         case .hud: .gray
+        case .messages: .green
         }
     }
 }

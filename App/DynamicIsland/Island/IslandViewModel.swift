@@ -71,8 +71,11 @@ final class IslandViewModel {
     /// in with its edge, under the camera. Coming out runs the same motion back.
     var isTucked: Bool {
         if let previewTuck { return previewTuck && presentation == .compact }
-        return hidesUntilHover && !revealed && !announcing && presentation == .compact
+        return hidesUntilHover && !revealed && !announcing && !hasUnreadBadges && presentation == .compact
     }
+
+    /// Unread messages wait on the island (the badges style), even when it hides until hover.
+    var hasUnreadBadges: Bool { !env.messages.activities.isEmpty && settings[module: .messages].showInCompact }
 
     /// The Settings preview of the reveal: tucked or out, played by the preview itself.
     private(set) var previewTuck: Bool?
@@ -225,16 +228,34 @@ final class IslandViewModel {
         return d
     }
 
-    /// Where a peek can open: the track's artwork on the compact island, or a device alert's icon.
+    /// A message alert showing, and its messages.
+    var messageAlert: (messages: [MessageInfo], style: MessageAlertStyle)? {
+        if case .alert(let a) = presentation, case .messages(let list, let style) = a.style, !list.isEmpty { return (list, style) }
+        return nil
+    }
+
+    /// The pointer is on a message (ears, badges) or a stack: what they said
+    /// drops down, or the stack fans out into a list.
+    var peekingMessages: Bool {
+        guard peek, !isPreview, let m = messageAlert else { return false }
+        return m.style == .ears || m.style == .badges || m.style == .stack
+    }
+
+    /// Where a peek can open: the track's artwork on the compact island, a device alert's icon, or a message.
     var allowsPeek: Bool {
         if presentation == .compact { return !isTucked }
         if case .alert(let a) = presentation, case .deviceConnected = a.style { return true }
+        if let m = messageAlert { return m.style != .card && m.style != .ticker }
         return false
     }
 
     private var peekHeight: CGFloat {
         if let info = peekingTrack {
             return IslandMetrics.nowPlayingPeekHeight(style: settings.compactStyle, hasArtist: !info.artist.isEmpty)
+        }
+        // A message: who and what, like a title and an artist.
+        if peekingMessages, messageAlert?.style != .stack {
+            return IslandMetrics.nowPlayingPeekHeight(style: settings.compactStyle, hasArtist: true)
         }
         // A device: its name and a line of batteries, like a title and an artist.
         return peekingDevice == nil ? 0 : IslandMetrics.nowPlayingPeekHeight(style: settings.compactStyle, hasArtist: true)
@@ -276,6 +297,9 @@ final class IslandViewModel {
             size.height += peekHeight
         } else if peekingDevice != nil {
             size.height += peekHeight
+        } else if peekingMessages, let m = messageAlert {
+            // A stack fans out into a row per message; ears drop the message down.
+            if m.style == .stack { size.height = IslandMetrics.messageListHeight(count: m.messages.count) } else { size.height += peekHeight }
         }
         return size
     }
@@ -294,6 +318,7 @@ final class IslandViewModel {
             case .shelf(let items): "\(items.count) items on the shelf"
             case .download(let d): "Downloading \(d.name)\(d.fraction.map { ", \(Int($0 * 100)) percent" } ?? "")"
             case .privacy(let p): p.microphone && p.camera ? "Microphone and camera in use" : p.microphone ? "Microphone in use" : "Camera in use"
+            case .messages(let apps): apps.map { "\($0.count) unread in \($0.app)" }.joined(separator: ", ")
             }
         }
         if !fit.ranked.overflow.isEmpty { parts.append("and \(fit.ranked.overflow.count) more") }
@@ -388,6 +413,8 @@ final class IslandViewModel {
         withAnimation(reduceMotion ? nil : IslandMotion.hover) { hover = inside }
         // When the island hides until hover, coming out is the motion: no bounce on top.
         if inside, !isOpen, !reduceMotion, !hidesUntilHover { bounce += 1 }
+        // A message stays while it's being read.
+        if messageAlert != nil { inside ? env.engine.holdAlert() : env.engine.releaseAlert(after: 1.5) }
     }
 
     /// Should this point (in the island's coordinate space) show the title? Only
@@ -405,8 +432,8 @@ final class IslandViewModel {
     func setOverMedia(_ on: Bool) {
         guard on != overMedia else { return }
         overMedia = on
-        // A device alert stays up while its details are being read.
-        if case .alert = presentation { on ? env.engine.holdAlert() : env.engine.releaseAlert() }
+        // A device alert stays up while its details are being read (a message, while the pointer is on the island).
+        if case .alert = presentation, messageAlert == nil { on ? env.engine.holdAlert() : env.engine.releaseAlert() }
         peekTask?.cancel()
         peekTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(on ? 60 : 140))
@@ -431,7 +458,10 @@ final class IslandViewModel {
         case .compact:
             if let primary = ranked.primary { open(primary.id) } else { openDashboard() }
         case .expanded, .dashboard, .shelf: collapse()
-        case .alert: env.engine.dismissAlert()
+        case .alert:
+            // A message opens its conversation.
+            if let m = messageAlert?.messages.first { env.messages.open(m) }
+            env.engine.dismissAlert()
         }
     }
 

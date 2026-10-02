@@ -187,6 +187,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                 }
             }
+        case "debug-ax-banner":
+            if query["windows"] != nil { Log.info("ax windows: " + AXDump.windows()) } else { Log.info("ax banner:\n" + AXDump.notificationCenter()) }
         case "debug-audio":
             // What the waveform hears: the tap, and the bars' latest heights.
             Log.info("audio levels: \(env.audioLevels.debugDescription)")
@@ -254,6 +256,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             env.settings.settings.compactStyle = saved
+        case "debug-render-badge":
+            let badge = HStack(spacing: 14) {
+                UnreadBadgeIcon(app: UnreadApp(app: "Messages", bundleID: "com.apple.MobileSMS", count: 3, lastSender: "Mum"))
+                Phase2Glyph(payload: .messages([UnreadApp(app: "Slack", bundleID: "com.tinyspeck.slackmacgap", count: 12, lastSender: "Kofi")]))
+            }
+            .padding(14).background(.black).environment(\.colorScheme, .dark).environment(env)
+            let r = ImageRenderer(content: badge)
+            r.scale = 3
+            if let img = r.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+                try? rep.representation(using: .png, properties: [:])?.write(to: Log.fileURL.deletingLastPathComponent().appendingPathComponent("badge.png"))
+            }
+        case "debug-message-style":
+            // dynamicisland://debug-message-style?style=card|ears|ticker|stack|badges&forget=<app>
+            if let style = query["style"].flatMap(MessageAlertStyle.init(rawValue:)) { env.settings.settings.messages.style = style }
+            if let app = query["forget"] { env.settings.settings.messages.apps[app] = nil }
+            Log.info("messages: style \(env.settings.settings.messages.style.rawValue), unread \(env.messages.unread.map { "\($0.app) \($0.count)" }), apps \(env.messages.appList().map { "\($0) \(env.settings.settings.messages.shows(app: $0) ? "on" : "off")" })")
+        case "debug-render-messages":
+            // Each message style, and their hover states, beside the notch.
+            let ama = MessageInfo(id: "a", app: "WhatsApp", bundleID: "net.whatsapp.WhatsApp", sender: "Ama Mensah", text: "Are we still on for 6? I'll bring the charger 🔌")
+            let kofi = MessageInfo(id: "k", app: "Slack", bundleID: "com.tinyspeck.slackmacgap", sender: "Kofi", context: "#design", text: "Pushed the new icons, can you take a look before standup?")
+            let mum = MessageInfo(id: "m", app: "Messages", bundleID: "com.apple.MobileSMS", sender: "Mum", text: "Call me when you're free ❤️")
+            let cases: [(String, [MessageInfo], MessageAlertStyle, Bool)] = [
+                ("card", [ama], .card, false), ("ears", [ama], .ears, false), ("ears-hover", [ama], .ears, true),
+                ("ticker", [kofi], .ticker, false), ("stack", [mum, kofi, ama], .stack, false), ("stack-hover", [mum, kofi, ama], .stack, true),
+                ("badges", [ama], .badges, false)]
+            for (name, list, style, hover) in cases {
+                let model = IslandViewModel(env: env, notch: NotchRect(rect: CGRect(x: 0, y: 0, width: 185, height: 32), isHardware: false))
+                model.debugPresentation = .alert(IslandAlert(kind: .messages, style: .messages(list, style)))
+                model.debugPeek(hover: hover, peek: hover)
+                let r = ImageRenderer(content: PreviewCanvas(model: model, availableWidth: 760).environment(env))
+                r.scale = 2
+                if let img = r.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+                    try? rep.representation(using: .png, properties: [:])?.write(to: Log.fileURL.deletingLastPathComponent().appendingPathComponent("message-\(name).png"))
+                    Log.info("render message-\(name) outer \(model.outerSize)")
+                }
+            }
         case "debug-media-rects":
             // Where each island thinks the playing track is, next to the island's own outline.
             for (id, c) in islands.controllers {
