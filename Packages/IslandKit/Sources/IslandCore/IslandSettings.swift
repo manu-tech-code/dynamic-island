@@ -320,6 +320,7 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     public var clipboard = ClipboardSettings()
     public var shortcuts = ShortcutsSettings()
     public var privacy = PrivacySettings()
+    public var messages = MessageAlertSettings()
     public var dashboard: [DashboardItem] = DashboardItem.defaults
 
     public init() {}
@@ -365,7 +366,16 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         s.shelf.dragActivationDistance = min(max(s.shelf.dragActivationDistance, 20), 300)
         var seen = Set<ActivityKind>()
         s.priority = s.priority.filter { $0.canBeLive && seen.insert($0).inserted }
-        for k in ActivityKind.defaultPriority where !seen.contains(k) { s.priority.append(k) }
+        // Missing kinds go last, except ones added in a later version, which go next
+        // to where they belong (Messages after Timers) instead of below everything.
+        for k in ActivityKind.defaultPriority where !seen.contains(k) {
+            if let after = ActivityKind.addedAfter[k], let i = s.priority.firstIndex(of: after) {
+                s.priority.insert(k, at: i + 1)
+            } else {
+                s.priority.append(k)
+            }
+            seen.insert(k)
+        }
         s.timers.presetMinutes = Array(Set(s.timers.presetMinutes.filter { $0 > 0 && $0 <= 24 * 60 })).sorted()
         s.systemStats.refreshSeconds = min(max(s.systemStats.refreshSeconds, 0.5), 10)
         var seenWidgets = Set<DashboardWidgetKind>()
@@ -384,7 +394,7 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         case glowFromArtwork, displays, showMenuBarIcon, modules
         case openWidthScale, compactMaxWidth, dashboardButton, fullScreen, visibility, revealStyle, whilePlaying, virtualNotchWhenIdle, lockIndicator, hotKey
         case nowPlaying, backgroundApps, calendar, timers, battery, systemStats
-        case shelf, downloads, devices, hud, weather, clipboard, shortcuts, privacy, dashboard
+        case shelf, downloads, devices, hud, weather, clipboard, shortcuts, privacy, dashboard, messages
     }
 
     /// Per-module keys from version 0.1, read once and folded into `modules`.
@@ -435,6 +445,7 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         clipboard = c.tolerant(.clipboard, d.clipboard)
         shortcuts = c.tolerant(.shortcuts, d.shortcuts)
         privacy = c.tolerant(.privacy, d.privacy)
+        messages = c.tolerant(.messages, d.messages)
 
         // Unknown widget kinds (from a newer version) are skipped, not fatal.
         if let raw = try? c.decodeIfPresent([[String: String]].self, forKey: .dashboard) {
