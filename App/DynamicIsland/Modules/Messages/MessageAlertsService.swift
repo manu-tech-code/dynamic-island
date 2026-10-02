@@ -93,7 +93,12 @@ final class MessageAlertsService: ActivityProvider {
         let message = MessageInfo(id: banner.id, app: banner.appName, bundleID: bundleID,
                                   sender: banner.title.isEmpty ? banner.appName : banner.title,
                                   context: banner.subtitle, text: banner.body)
-        remember(banner)
+        // Once, on the island: macOS's banner goes before it's really on screen.
+        if s.messages.hideSystemBanner, NotificationBannerReader.close(banner) {
+            Log.info("messages: closed macOS's banner")
+        } else {
+            remember(banner)
+        }
         show(message, style: s.messages.style)
     }
 

@@ -324,6 +324,13 @@ struct MessagesModuleSettings: View {
                 Text("Shows “New message” with who it's from, for screen sharing or a café.").font(.caption).foregroundStyle(.secondary)
             }
         }
+        Toggle(isOn: $store.settings.messages.hideSystemBanner) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Hide macOS's banner")
+                Text("Messages show once, on the island: macOS's own banner is closed as it appears, for the apps switched on below. That also takes them out of Notification Center's list, and Open goes to the app rather than the conversation.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
         Stepper(value: $store.settings.messages.holdSeconds, in: 3...15, step: 1) {
             LabeledContent("Keep a message on the island for", value: "\(Int(store.settings.messages.holdSeconds)) s")
         }
@@ -351,7 +358,7 @@ struct MessagesModuleSettings: View {
                 }
             }
         }
-        Text("The island reads the banners macOS shows, so each app's notification settings and Focus still apply. Nothing is kept or sent anywhere; clicking a message opens its conversation.")
+        Text("The island reads the banners macOS shows, so each app's notification settings and Focus still apply. Nothing is kept or sent anywhere.")
             .font(.caption).foregroundStyle(.secondary)
     }
 

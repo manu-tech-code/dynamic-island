@@ -188,7 +188,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         case "debug-ax-banner":
-            if query["windows"] != nil { Log.info("ax windows: " + AXDump.windows()) } else { Log.info("ax banner:\n" + AXDump.notificationCenter()) }
+            if query["windows"] != nil { Log.info("ax windows: " + AXDump.windows()) }
+            else if query["actions"] != nil { Log.info("ax actions:\n" + AXDump.bannerActions()) }
+            else if let name = query["perform"] { Log.info("ax perform " + AXDump.perform(name)) }
+            else if let text = query["history"] { Task { Log.info("ax history: " + (await AXDump.historyContains(text))) } }
+            else if let text = query["clear"] { Task { Log.info("ax clear: " + (await AXDump.historyContains(text, clearing: true))) } }
+            else { Log.info("ax banner:\n" + AXDump.notificationCenter()) }
         case "debug-audio":
             // What the waveform hears: the tap, and the bars' latest heights.
             Log.info("audio levels: \(env.audioLevels.debugDescription)")

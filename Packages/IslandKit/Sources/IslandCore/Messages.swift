@@ -85,6 +85,10 @@ public struct MessageAlertSettings: Codable, Equatable, Sendable {
     public var apps: [String: Bool] = [:]
     /// How long a message stays (the ticker stays until it has scrolled by).
     public var holdSeconds: Double = 5
+    /// Close macOS's own banner for apps the island shows, so a message appears
+    /// once. It also leaves Notification Center's list, and Open goes to the
+    /// app rather than the conversation.
+    public var hideSystemBanner = true
     public init() {}
 
     /// Whether this app's notifications show on the island.

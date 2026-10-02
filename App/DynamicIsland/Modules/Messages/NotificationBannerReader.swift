@@ -77,21 +77,36 @@ final class NotificationBannerReader {
 
     /// Something changed in Notification Center: look for new banners, once
     /// the burst of changes a banner arriving makes has settled a little.
+    /// Something changed in Notification Center: look for new banners at once,
+    /// so one can be closed before it's really on screen, and again a moment
+    /// later in case its text was still being filled in.
     private func changed(_ notification: String) {
+        scan()
         scanTask?.cancel()
         scanTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(60))
+            try? await Task.sleep(for: .milliseconds(80))
             guard !Task.isCancelled else { return }
             self?.scan()
         }
     }
 
     private func scan() {
-        for banner in Self.banners(pid: pid) where !seen.contains(banner.id) {
+        // Only once it has something to say: an empty banner is still being filled in.
+        for banner in Self.banners(pid: pid) where !seen.contains(banner.id) && !(banner.title.isEmpty && banner.body.isEmpty) {
             seen.append(banner.id)
             if seen.count > 200 { seen.removeFirst(100) }
             onBanner(banner)
         }
+    }
+
+    /// Closes macOS's own banner, as its ✕ would. That also takes the
+    /// notification out of Notification Center's list.
+    @discardableResult
+    static func close(_ banner: Banner) -> Bool {
+        var names: CFArray?
+        AXUIElementCopyActionNames(banner.element, &names)
+        guard let close = ((names as? [String]) ?? []).first(where: { $0.hasPrefix("Name:Close") }) else { return false }
+        return AXUIElementPerformAction(banner.element, close as CFString) == .success
     }
 
     // MARK: reading the banners

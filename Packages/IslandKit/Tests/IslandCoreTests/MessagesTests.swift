@@ -37,6 +37,7 @@ import Testing
         let s = IslandSettings()
         #expect(s.messages.style == .card)
         #expect(!s.messages.hideText && s.messages.apps.isEmpty)
+        #expect(s.messages.hideSystemBanner)                    // once, on the island
         #expect(s[module: .messages].enabled)
         let old = try JSONDecoder().decode(IslandSettings.self, from: Data(#"{"messages":{"style":"stack"}}"#.utf8))
         #expect(old.messages.style == .stack)
