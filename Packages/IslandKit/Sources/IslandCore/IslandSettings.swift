@@ -192,6 +192,8 @@ public struct TimerSettings: Codable, Equatable, Sendable {
 public struct BatterySettings: Codable, Equatable, Sendable {
     public var alertOnPower: Bool = true
     public var lowBatteryPercents: [Int] = [20, 10]
+    /// The percentage beside the battery at the top of the dashboard.
+    public var showPercent: Bool = true
     public init() {}
 }
 

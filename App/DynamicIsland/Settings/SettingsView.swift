@@ -2,7 +2,7 @@ import IslandCore
 import SwiftUI
 
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, layout, dashboard, appearance, modules, permissions, about
+    case general, layout, dashboard, notifications, appearance, modules, permissions, about
     var id: String { rawValue }
 
     var title: String {
@@ -10,6 +10,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: "General"
         case .layout: "Layout"
         case .dashboard: "Dashboard"
+        case .notifications: "Notifications"
         case .appearance: "Appearance"
         case .modules: "Modules"
         case .permissions: "Permissions"
@@ -22,6 +23,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: "gearshape.fill"
         case .layout: "capsule.fill"
         case .dashboard: "square.grid.2x2.fill"
+        case .notifications: "bell.badge.fill"
         case .appearance: "circle.lefthalf.filled"
         case .modules: "square.stack.3d.up.fill"
         case .permissions: "hand.raised.fill"
@@ -34,6 +36,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: .gray
         case .layout: .blue
         case .dashboard: .teal
+        case .notifications: .red
         case .appearance: .indigo
         case .modules: .orange
         case .permissions: .green
@@ -68,6 +71,7 @@ struct SettingsView: View {
                 case .general: GeneralPane()
                 case .layout: LayoutPane()
                 case .dashboard: DashboardPane()
+                case .notifications: NotificationsPane()
                 case .appearance: AppearancePane()
                 case .modules: ModulesPane()
                 case .permissions: PermissionsPane()
@@ -342,6 +346,9 @@ private struct DashboardPane: View {
         Form {
             Section {
                 IslandPreview(state: $preview, states: [.dashboard])
+            }
+            Section("Top bar") {
+                Toggle("Show the battery percentage", isOn: $store.settings.battery.showPercent)
             }
             Section {
                 if items.isEmpty {
@@ -644,7 +651,13 @@ private struct ModulesPane: View {
             Toggle("Camera", isOn: $store.settings.privacy.showCamera)
         case .devices: DevicesModuleSettings()
         case .hud: HUDModuleSettings()
-        case .messages: MessagesModuleSettings()
+        case .messages:
+            // Everything about messages lives in its own pane, with a preview.
+            HStack {
+                Text("Styles, apps and a live preview are in Notifications.").foregroundStyle(.secondary)
+                Spacer()
+                Button("Open Notifications") { UserDefaults.standard.set(SettingsPane.notifications.rawValue, forKey: "settings.lastPane") }
+            }
         case .backgroundApps:
             Stepper(value: $store.settings.backgroundApps.maxIcons, in: 1...24) {
                 LabeledContent("Icons on the compact island", value: "\(store.settings.backgroundApps.maxIcons)")

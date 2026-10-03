@@ -251,3 +251,41 @@ extension ActivityKind {
         }
     }
 }
+
+/// The battery as the menu bar draws it: an outline filled as far as the
+/// charge goes, green with a bolt while charging, red when it's low.
+struct BatteryGlyph: View {
+    let percent: Int
+    let charging: Bool
+
+    var body: some View {
+        let level = Double(min(max(percent, 0), 100)) / 100
+        let fill: Color = charging ? .green : percent <= 10 ? .red : percent <= 20 ? .orange : .primary
+        HStack(spacing: 1) {
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+                    .strokeBorder(.primary.opacity(0.45), lineWidth: 1)
+                GeometryReader { g in
+                    RoundedRectangle(cornerRadius: 1.8, style: .continuous)
+                        .fill(fill)
+                        .frame(width: max(1.5, g.size.width * level))
+                }
+                .padding(2)
+                if charging {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 8, weight: .black))
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.6), radius: 0.5)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .frame(width: 25, height: 12)
+            // The terminal nub.
+            UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: 0, bottomTrailingRadius: 1, topTrailingRadius: 1)
+                .fill(.primary.opacity(0.45))
+                .frame(width: 1.5, height: 4)
+        }
+        .accessibilityElement()
+        .accessibilityLabel(charging ? "Battery \(percent) percent, charging" : "Battery \(percent) percent")
+    }
+}
