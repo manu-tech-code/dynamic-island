@@ -23,18 +23,37 @@ final class MessageAlertsService: ActivityProvider {
     @ObservationIgnored private let reader = NotificationBannerReader()
     @ObservationIgnored private var icons: [String: NSImage] = [:]
     @ObservationIgnored private var trustPoll: Task<Void, Never>?
+    /// The displays the island is on (set by the islands).
+    @ObservationIgnored var islandDisplays: () -> Set<CGDirectDisplayID> = { [] }
+    @ObservationIgnored private var installed = InstalledApps.Catalog()
+    @ObservationIgnored private var installedTask: Task<Void, Never>?
+    @ObservationIgnored private var runningNames: (date: Date, names: [String])?
+    @ObservationIgnored private var cachedAppList: (date: Date, list: [String])?
 
     init(settings: SettingsStore, engine: ActivityEngine) {
         self.settings = settings
         self.engine = engine
         engine.register(self)
+        // Left out of sight by a crash last time? Back on screen first.
+        NotificationBannerReader.recoverIfNeeded()
+        reader.restoreOnSignals()
         reader.onBanner = { [weak self] banner in self?.received(banner) }
-        // macOS's own banner stays out of sight for the apps the island shows ("" asks: for any app?).
-        reader.hidesBanner = { [settings] app in
+        // macOS's own banner stays out of sight for the apps the island shows.
+        reader.hidesAny = { [settings] in
             let s = settings.settings
-            guard s[module: .messages].enabled, s.messages.hideSystemBanner else { return false }
-            return app.isEmpty || s.messages.shows(app: app)
+            return s[module: .messages].enabled && s.messages.hideSystemBanner
         }
+        reader.hidesBanner = { [weak self] app in
+            guard let self, self.reader.hidesAny(), !app.isEmpty else { return false }
+            return self.settings.settings.messages.shows(app: app, bundleID: self.bundleID(for: app))
+        }
+        reader.islandAt = { [weak self] point in self?.islandShows(at: point) ?? true }
+        reader.appNames = { [weak self] in self?.appNames() ?? [] }
+        reader.onTrustLost = { [weak self] in
+            self?.trusted = false
+            self?.waitForTrust()
+        }
+        refreshInstalled()
         // Opening an app reads its messages: its badge goes.
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] note in
             let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
@@ -79,11 +98,13 @@ final class MessageAlertsService: ActivityProvider {
         waitForTrust()
     }
 
+    /// Every 2 s for two minutes after asking, then every 15 s.
     private func waitForTrust() {
         guard trustPoll == nil, !trusted else { return }
         trustPoll = Task { [weak self] in
+            let started = Date.now
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(for: .seconds(Date.now.timeIntervalSince(started) < 120 ? 2 : 15))
                 guard let self else { return }
                 if AXIsProcessTrusted() {
                     self.trustPoll = nil
@@ -99,20 +120,65 @@ final class MessageAlertsService: ActivityProvider {
     private func received(_ banner: NotificationBannerReader.Banner) {
         let s = settings.settings
         guard s[module: .messages].enabled else { return }
-        let app = Self.runningApp(named: banner.appName)
+        // A banner whose app can't be told still shows, but isn't remembered in Settings.
+        let name = banner.appName ?? String(localized: "Notification")
+        let app = banner.appName.flatMap(Self.runningApp(named:))
         guard app?.bundleIdentifier != Bundle.main.bundleIdentifier else { return }
-        let bundleID = app?.bundleIdentifier ?? Self.installedApp(named: banner.appName)?.bundleID
-        // Each app the first time: it joins the list in Settings, on or off by default.
-        if s.messages.apps[banner.appName] == nil {
-            settings.settings.messages.apps[banner.appName] = MessageAlertSettings.shownByDefault(app: banner.appName)
+        let bundleID = app?.bundleIdentifier ?? banner.appName.flatMap { installed.app(named: $0)?.bundleID }
+        if let known = banner.appName {
+            // Each app the first time: it joins the list in Settings, on or off by default.
+            if s.messages.apps[known] == nil {
+                settings.settings.messages.apps[known] = MessageAlertSettings.shownByDefault(app: known, bundleID: bundleID)
+                cachedAppList = nil
+            }
+            guard settings.settings.messages.shows(app: known, bundleID: bundleID) else { return }
         }
-        guard s.messages.shows(app: banner.appName) else { return }
         // Nothing to show: a banner that's only an app name.
         guard !banner.title.isEmpty || !banner.body.isEmpty else { return }
-        let message = MessageInfo(id: banner.id, app: banner.appName, bundleID: bundleID,
-                                  sender: banner.title.isEmpty ? banner.appName : banner.title,
+        let message = MessageInfo(id: banner.id, app: name, bundleID: bundleID,
+                                  sender: banner.title.isEmpty ? name : banner.title,
                                   context: banner.subtitle, text: banner.body)
         show(message, style: s.messages.style)
+    }
+
+    // MARK: which app, which display
+
+    /// The names of the apps here, as macOS shows them (in the user's language),
+    /// for telling which app a banner is from.
+    private func appNames() -> [String] {
+        if let cached = runningNames, Date.now.timeIntervalSince(cached.date) < 5 { return cached.names }
+        let running = NSWorkspace.shared.runningApplications.compactMap(\.localizedName)
+        let names = Array(Set(running.map(MessageInfo.clean) + installed.names))
+        runningNames = (.now, names)
+        return names
+    }
+
+    private func bundleID(for app: String) -> String? {
+        Self.runningApp(named: app)?.bundleIdentifier ?? installed.app(named: app)?.bundleID
+    }
+
+    /// Whether the island is on the display at this point (Accessibility's
+    /// coordinates, from the top of the main display).
+    private func islandShows(at point: CGPoint) -> Bool {
+        let displays = islandDisplays()
+        guard !displays.isEmpty, let main = NSScreen.screens.first else { return true }
+        let spot = CGPoint(x: point.x + 1, y: main.frame.maxY - point.y - 1)
+        let screen = NSScreen.screens.first { $0.frame.contains(spot) } ?? main
+        guard let id = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? CGDirectDisplayID else { return true }
+        return displays.contains(id)
+    }
+
+    /// The apps in the usual folders, read in the background now and then.
+    private func refreshInstalled() {
+        guard installedTask == nil else { return }
+        installedTask = Task { [weak self] in
+            let catalog = await Task.detached(priority: .utility) { InstalledApps.scan() }.value
+            guard let self else { return }
+            self.installed = catalog
+            self.runningNames = nil
+            self.cachedAppList = nil
+            self.installedTask = nil
+        }
     }
 
     /// Shows a message as if it had arrived (Settings' test button, debugging).
@@ -166,7 +232,7 @@ final class MessageAlertsService: ActivityProvider {
     func openApp(name: String, bundleID: String?) {
         if let app = Self.runningApp(named: name) {
             app.activate()
-        } else if let url = bundleID.flatMap({ NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }) ?? Self.installedApp(named: name)?.url {
+        } else if let url = bundleID.flatMap({ NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }) ?? installed.app(named: name)?.url {
             NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
         }
         clear(name: name, bundleID: bundleID)
@@ -215,49 +281,86 @@ final class MessageAlertsService: ActivityProvider {
 
     /// The apps Settings lists: every app that has sent a banner, and the
     /// messaging and music apps installed here (so WhatsApp and Music are there
-    /// before they've said anything).
+    /// before they've said anything). Kept a minute: Settings asks often.
     func appList() -> [String] {
-        let installed = MessagingApps.bundleIDs.union(MessagingApps.mediaBundleIDs).compactMap { id -> String? in
-            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) else { return nil }
-            return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
-        }
+        if let cached = cachedAppList, Date.now.timeIntervalSince(cached.date) < 60 { return cached.list }
+        let ids = MessagingApps.bundleIDs.union(MessagingApps.mediaBundleIDs)
+        let installedNames = installed.apps.filter { $0.bundleID.map(ids.contains) ?? false }.map(\.name)
         let seen = Set(settings.settings.messages.apps.keys)
         // Banners use the short name ("Teams"), the app file the long one
         // ("Microsoft Teams"): list it once, as its banners name it.
-        let extra = installed.map(Self.clean).filter { name in
+        let extra = installedNames.filter { name in
             !seen.contains { $0 == name || name.hasSuffix(" " + $0) || $0.hasSuffix(" " + name) }
         }
-        return seen.union(extra).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        let list = seen.union(extra).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        cachedAppList = (.now, list)
+        return list
     }
 
     /// The app's icon, for the island.
     func icon(for app: String, bundleID: String?) -> NSImage? {
         if let cached = icons[app] { return cached }
         let url = bundleID.flatMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }
-            ?? Self.runningApp(named: app)?.bundleURL ?? Self.installedApp(named: app)?.url
+            ?? Self.runningApp(named: app)?.bundleURL ?? installed.app(named: app)?.url
         guard let url else { return nil }
         let icon = NSWorkspace.shared.icon(forFile: url.path)
         icons[app] = icon
         return icon
     }
 
-    /// Without the invisible marks some apps put in their names (WhatsApp's starts with one).
-    private static func clean(_ name: String) -> String {
-        name.unicodeScalars.filter { !["\u{200E}", "\u{200F}", "\u{202A}", "\u{202C}"].contains($0) }
-            .map(String.init).joined().trimmingCharacters(in: .whitespaces)
-    }
-
     private static func runningApp(named name: String) -> NSRunningApplication? {
-        NSWorkspace.shared.runningApplications.first { $0.localizedName == name && $0.activationPolicy == .regular }
-            ?? NSWorkspace.shared.runningApplications.first { $0.localizedName == name }
+        let apps = NSWorkspace.shared.runningApplications.filter { $0.localizedName.map(MessageInfo.clean) == name }
+        return apps.first { $0.activationPolicy == .regular } ?? apps.first
+    }
+}
+
+/// The apps in the usual folders, by the name macOS shows for each (in the
+/// user's language: Messages.app is "Nachrichten" in German) and by file name.
+nonisolated enum InstalledApps {
+    struct App: Sendable {
+        let name: String
+        let url: URL
+        let bundleID: String?
     }
 
-    /// An app that isn't running, found by its name where apps live.
-    private static func installedApp(named name: String) -> (url: URL, bundleID: String?)? {
-        for dir in ["/Applications", "/System/Applications", "/System/Applications/Utilities", NSHomeDirectory() + "/Applications"] {
-            let url = URL(fileURLWithPath: dir).appendingPathComponent(name + ".app")
-            if FileManager.default.fileExists(atPath: url.path) { return (url, Bundle(url: url)?.bundleIdentifier) }
+    struct Catalog: Sendable {
+        var apps: [App] = []
+        private var byName: [String: App] = [:]
+
+        init(apps: [App] = []) {
+            self.apps = apps
+            for app in apps {
+                byName[app.name] = byName[app.name] ?? app
+                let file = MessageInfo.clean(app.url.deletingPathExtension().lastPathComponent)
+                byName[file] = byName[file] ?? app
+            }
         }
-        return nil
+
+        var names: [String] { apps.map(\.name) }
+        func app(named name: String) -> App? { byName[name] }
+    }
+
+    static func scan() -> Catalog {
+        let fm = FileManager.default
+        let folders = ["/Applications", "/Applications/Utilities", "/System/Applications", "/System/Applications/Utilities",
+                       NSHomeDirectory() + "/Applications"]
+        var apps: [App] = []
+        func add(_ path: String) {
+            let url = URL(fileURLWithPath: path)
+            let name = MessageInfo.clean(fm.displayName(atPath: path).replacingOccurrences(of: ".app", with: ""))
+            apps.append(App(name: name, url: url, bundleID: Bundle(url: url)?.bundleIdentifier))
+        }
+        for folder in folders {
+            for item in (try? fm.contentsOfDirectory(atPath: folder)) ?? [] where !item.hasPrefix(".") {
+                let path = folder + "/" + item
+                if item.hasSuffix(".app") {
+                    add(path)
+                } else {
+                    // One folder down: "Microsoft Office/…", "Adobe …/…".
+                    for inner in (try? fm.contentsOfDirectory(atPath: path)) ?? [] where inner.hasSuffix(".app") { add(path + "/" + inner) }
+                }
+            }
+        }
+        return Catalog(apps: apps)
     }
 }

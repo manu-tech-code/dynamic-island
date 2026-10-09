@@ -7,12 +7,25 @@ import Testing
     let notch = CGSize(width: 185, height: 32)
 
     @Test func readsTheAppFromABanner() {
-        // As Notification Center describes a banner to Accessibility.
-        #expect(MessageInfo.appName(fromBannerDescription: "WhatsApp, Ama Mensah, Are we still on for 6?", title: "Ama Mensah") == "WhatsApp")
-        #expect(MessageInfo.appName(fromBannerDescription: "Microsoft Teams, Sarah, Daily sync, Running late", title: "Sarah") == "Microsoft Teams")
-        #expect(MessageInfo.appName(fromBannerDescription: "Script Editor, Ama Mensah, Test message, Hello", title: "Ama Mensah") == "Script Editor")
-        // No title: the first part.
-        #expect(MessageInfo.appName(fromBannerDescription: "Calendar, Standup in 5 minutes", title: "") == "Calendar")
+        let apps = ["WhatsApp", "Microsoft Teams", "Teams", "Mail", "Nachrichten", "Script Editor"]
+        func app(_ d: String, _ title: String, _ known: [String] = apps) -> String? {
+            MessageInfo.appName(fromBannerDescription: d, title: title, knownApps: known)
+        }
+        // As Notification Center describes a banner to Accessibility: the app comes first.
+        #expect(app("WhatsApp, Ama Mensah, Are we still on for 6?", "Ama Mensah") == "WhatsApp")
+        // The longest name it starts with, and only a whole name.
+        #expect(app("Microsoft Teams, Sarah, Daily sync, Running late", "Sarah") == "Microsoft Teams")
+        #expect(app("Mailchimp, Campaign sent", "Campaign sent", ["Mail"]) == "Mailchimp")
+        // Other languages: a localized app name, other punctuation, direction marks.
+        #expect(app("Nachrichten, Mama, Ruf mich an", "Mama") == "Nachrichten")
+        #expect(app("\u{200E}WhatsApp\u{200E}، أحمد، مرحبا", "أحمد") == "WhatsApp")
+        #expect(app("微信，张伟，你好", "张伟", []) == "微信")
+        #expect(app("ライン、田中、こんにちは", "田中", []) == "ライン")
+        // An app the island doesn't know, in English: before the title.
+        #expect(app("Calendar, Standup in 5 minutes", "", []) == "Calendar")
+        // Nothing usable: not remembered, not hidden.
+        #expect(app("", "Ama") == nil)
+        #expect(app("Ama Mensah sent you a very long message that is not an app name at all", "x", []) == nil)
     }
 
     @Test func initialsForTheSendersCircle() {
@@ -22,15 +35,14 @@ import Testing
         #expect(MessageInfo(id: "4", app: "Mail", sender: "", text: "").initials == "M")
     }
 
-    @Test func knowsMessagingApps() {
-        #expect(MessagingApps.isMessaging(app: "WhatsApp", bundleID: nil))
-        #expect(MessagingApps.isMessaging(app: "Anything", bundleID: "com.tinyspeck.slackmacgap"))
-        #expect(MessagingApps.isMessaging(app: "Microsoft Teams", bundleID: nil))
-        #expect(!MessagingApps.isMessaging(app: "Script Editor", bundleID: "com.apple.ScriptEditor2"))
-        #expect(!MessagingApps.isMessaging(app: "Calendar", bundleID: "com.apple.iCal"))
+    @Test func knowsMusicAppsInAnyLanguage() {
         // Music announces songs; the island shows them already.
         #expect(MessagingApps.isMedia(app: "Music") && MessagingApps.isMedia(app: "Spotify"))
         #expect(!MessagingApps.isMedia(app: "WhatsApp"))
+        // German "Musik" is Apple Music, by its bundle id.
+        #expect(MessagingApps.isMedia(app: "Musik", bundleID: "com.apple.Music"))
+        #expect(!MessageAlertSettings().shows(app: "Musik", bundleID: "com.apple.Music"))
+        #expect(MessageAlertSettings().shows(app: "Nachrichten", bundleID: "com.apple.MobileSMS"))
     }
 
     @Test func settingsDefaultToACardAndRoundTrip() throws {

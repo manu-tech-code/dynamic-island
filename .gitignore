@@ -14,3 +14,4 @@ DerivedData/
 # Local build output
 build/
 Spikes/build/
+.claude/worktrees/

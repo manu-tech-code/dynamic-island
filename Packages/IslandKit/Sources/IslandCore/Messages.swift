@@ -27,11 +27,33 @@ public struct MessageInfo: Equatable, Sendable, Identifiable {
         return letters.isEmpty ? String(app.prefix(1)).uppercased() : letters.joined()
     }
 
-    /// The banner's accessibility description reads "<App>, <title>, <subtitle>,
-    /// <body>": the app is what comes before the title.
-    public static func appName(fromBannerDescription description: String, title: String) -> String {
-        if !title.isEmpty, let r = description.range(of: ", " + title) { return String(description[..<r.lowerBound]) }
-        return description.components(separatedBy: ", ").first ?? description
+    /// The app a banner is from. Its accessibility description starts with the
+    /// app's name, then the title and the rest ("WhatsApp, Ama, …" in English;
+    /// other languages join the parts with their own punctuation). The longest
+    /// app name it starts with wins; without one, what comes before the title,
+    /// if that reads like a name. Nil when neither: such a banner is neither
+    /// remembered in Settings nor hidden.
+    public static func appName(fromBannerDescription description: String, title: String, knownApps: [String]) -> String? {
+        let d = clean(description)
+        guard !d.isEmpty else { return nil }
+        let known = knownApps.map(clean).filter { name in
+            // A whole name: "Mail" isn't the start of "Mailchimp".
+            guard !name.isEmpty, d.hasPrefix(name) else { return false }
+            return d.dropFirst(name.count).first.map { !$0.isLetter && !$0.isNumber } ?? true
+        }
+        if let longest = known.max(by: { $0.count < $1.count }) { return longest }
+        let t = clean(title)
+        let end = (!t.isEmpty ? d.range(of: t) : nil) ?? d.range(of: ", ")
+        guard let end else { return nil }
+        let name = d[..<end.lowerBound].trimmingCharacters(in: .whitespaces.union(.punctuationCharacters))
+        return (1...40).contains(name.count) && !name.contains("\n") ? name : nil
+    }
+
+    /// Without the invisible direction marks some apps and languages put in text.
+    public static func clean(_ text: String) -> String {
+        let marks: Set<UInt32> = [0x061C, 0x200E, 0x200F, 0x202A, 0x202B, 0x202C, 0x202D, 0x202E, 0x2066, 0x2067, 0x2068, 0x2069]
+        let kept = text.unicodeScalars.filter { !marks.contains($0.value) }
+        return String(String.UnicodeScalarView(kept)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
@@ -97,11 +119,11 @@ public struct MessageAlertSettings: Codable, Equatable, Sendable {
     public init() {}
 
     /// Whether this app's notifications show on the island.
-    public func shows(app: String) -> Bool { apps[app] ?? Self.shownByDefault(app: app) }
+    public func shows(app: String, bundleID: String? = nil) -> Bool { apps[app] ?? Self.shownByDefault(app: app, bundleID: bundleID) }
 
     /// Every app shows until it's turned off, except music and podcast apps:
     /// they announce each song, which the island shows already.
-    public static func shownByDefault(app: String) -> Bool { !MessagingApps.isMedia(app: app) }
+    public static func shownByDefault(app: String, bundleID: String? = nil) -> Bool { !MessagingApps.isMedia(app: app, bundleID: bundleID) }
 }
 
 /// Messages that reached the island lately, newest first, so one you missed is
@@ -159,34 +181,31 @@ public struct RecentMessages: Equatable, Sendable {
     }
 }
 
-/// Apps people send messages with, for "only messaging apps".
+/// Apps people send messages with (listed in Settings before they've said
+/// anything), and music apps (off until turned on).
 public enum MessagingApps {
     public static let bundleIDs: Set<String> = [
         "net.whatsapp.WhatsApp", "desktop.WhatsApp", "com.tinyspeck.slackmacgap", "com.apple.mail", "com.apple.MobileSMS",
         "com.microsoft.teams2", "com.microsoft.teams", "ru.keepcoder.Telegram", "org.telegram.desktop", "com.hnc.Discord",
         "org.whispersystems.signal-desktop", "com.microsoft.Outlook", "us.zoom.xos", "com.facebook.archon", "com.readdle.SparkDesktop",
         "com.skype.skype", "im.riot.app", "com.beeper.beeper-desktop", "com.viber.osx", "jp.naver.line.mac", "com.tencent.xinWeChat",
-        "com.superhuman.electron", "com.mimestream.Mimestream", "com.cisco.webexmeetingsapp", "com.google.Chrome.app.gmail",
+        "com.superhuman.electron", "com.mimestream.Mimestream", "com.cisco.webexmeetingsapp",
     ]
 
-    public static let names: Set<String> = [
-        "whatsapp", "slack", "mail", "messages", "microsoft teams", "teams", "telegram", "discord", "signal", "microsoft outlook",
-        "outlook", "zoom", "zoom.us", "messenger", "spark", "skype", "element", "beeper", "viber", "line", "wechat", "superhuman",
-        "mimestream", "airmail", "thunderbird", "webex", "gmail", "google chat", "facetime",
+    /// Apps whose notifications are only "now playing": the island shows the song
+    /// already. By bundle id, which is the same in every language ("Music" is
+    /// "Musik" in German); the names catch apps without one.
+    public static let mediaBundleIDs: Set<String> = [
+        "com.apple.Music", "com.apple.iTunes", "com.apple.podcasts", "com.apple.TV", "com.spotify.client", "com.tidal.desktop",
+        "com.deezer.deezer-desktop", "com.amazon.music", "com.coppertino.Vox", "com.github.th-ch.youtube-music",
     ]
 
-    /// Apps whose notifications are only "now playing": the island shows the song already.
     public static let mediaApps: Set<String> = [
         "music", "spotify", "podcasts", "tv", "tidal", "deezer", "amazon music", "youtube music", "audible", "vox", "doppler",
     ]
 
-    public static func isMedia(app: String) -> Bool { mediaApps.contains(app.lowercased()) }
-
-    /// Music and podcast apps, so Settings can list them (off) before they've said anything.
-    public static let mediaBundleIDs: Set<String> = ["com.apple.Music", "com.spotify.client", "com.apple.podcasts", "com.apple.TV"]
-
-    public static func isMessaging(app: String, bundleID: String?) -> Bool {
-        if let bundleID, bundleIDs.contains(bundleID) { return true }
-        return names.contains(app.lowercased())
+    public static func isMedia(app: String, bundleID: String? = nil) -> Bool {
+        if let bundleID, mediaBundleIDs.contains(bundleID) { return true }
+        return mediaApps.contains(app.lowercased())
     }
 }
