@@ -336,6 +336,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     Log.info("render message-\(name) outer \(model.outerSize)")
                 }
             }
+        case "debug-welcome":
+            // The first-run window, to look at (closing it saves the settings as they are).
+            showWelcomeWindow()
         case "debug-render-agents":
             // dynamicisland://debug-render-agents — each card, small and medium, once the week is read.
             let model = IslandViewModel(env: env, notch: NotchRect(rect: CGRect(x: 0, y: 0, width: 185, height: 32), isHardware: false))
