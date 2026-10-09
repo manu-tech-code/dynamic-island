@@ -221,6 +221,7 @@ struct ShortcutsSettingsSection: View {
         } footer: {
             Text(env.shortcuts.all.isEmpty ? "No shortcuts found. Make some in the Shortcuts app." : "\(env.shortcuts.all.count) shortcuts available.")
         }
+        .onAppear { env.shortcuts.loadIfNeeded() }
     }
 }
 

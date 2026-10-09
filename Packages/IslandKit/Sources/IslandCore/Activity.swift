@@ -199,6 +199,14 @@ public struct ShelfItemInfo: Equatable, Sendable, Codable, Identifiable {
     public init(id: UUID = UUID(), name: String, kind: ShelfItemKind, path: String, addedAt: Date = Date()) {
         self.id = id; self.name = name; self.kind = kind; self.path = path; self.addedAt = addedAt
     }
+
+    /// The external drive the item is on ("/Volumes/Backup"), nil on the startup disk.
+    /// While that drive isn't connected, the item waits on the shelf instead of leaving it.
+    public var volume: String? {
+        let parts = path.split(separator: "/", omittingEmptySubsequences: true)
+        guard parts.count >= 2, parts[0] == "Volumes" else { return nil }
+        return "/Volumes/" + parts[1]
+    }
 }
 
 public struct DownloadInfo: Equatable, Sendable, Identifiable {

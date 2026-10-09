@@ -30,14 +30,17 @@ final class FullScreenMonitor {
 
     func isFullScreen(_ display: CGDirectDisplayID) -> Bool { fullScreenDisplays.contains(display) }
 
-    /// Checks now and again after the Space-switch animation settles.
+    /// Checks now, again after the Space-switch animation settles, and once
+    /// more a little later for slower Macs and apps that go full screen late.
     private func schedule() {
         evaluate()
         pending?.cancel()
         pending = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(700))
-            guard !Task.isCancelled else { return }
-            self?.evaluate()
+            for wait in [700, 1300] {
+                try? await Task.sleep(for: .milliseconds(wait))
+                guard !Task.isCancelled else { return }
+                self?.evaluate()
+            }
         }
     }
 

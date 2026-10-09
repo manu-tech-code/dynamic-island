@@ -86,6 +86,7 @@ private struct ShelfTile: View {
     var body: some View {
         let shelf = env.shelf
         let selected = shelf.selection.contains(item.id)
+        let away = shelf.isOnMissingDrive(item)
         VStack(spacing: 7) {
             Image(nsImage: shelf.icon(for: item))
                 .resizable()
@@ -93,6 +94,7 @@ private struct ShelfTile: View {
                 .frame(width: 56, height: 56)
                 .clipShape(RoundedRectangle(cornerRadius: item.kind == .image ? 8 : 0, style: .continuous))
                 .shadow(color: .black.opacity(0.2), radius: 4, y: 2)
+                .opacity(away ? 0.4 : 1)
             Text(item.name)
                 .font(.system(size: 11, weight: .medium))
                 .lineLimit(2)
@@ -122,8 +124,8 @@ private struct ShelfTile: View {
         .onDrag {
             NSItemProvider(contentsOf: shelf.url(for: item)) ?? NSItemProvider()
         }
-        .help("\(item.name) — drag out to use, double-click to open")
-        .accessibilityLabel(item.name)
+        .help(away ? "\(item.name) — on a drive that isn't connected" : "\(item.name) — drag out to use, double-click to open")
+        .accessibilityLabel(away ? "\(item.name), on a drive that isn't connected" : item.name)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }

@@ -125,8 +125,16 @@ final class ShelfService: ActivityProvider {
         FileManager.default.fileExists(atPath: url(for: item).path)
     }
 
+    /// The item's drive isn't connected: it stays, dimmed, until the drive is back.
+    func isOnMissingDrive(_ item: ShelfItemInfo) -> Bool {
+        guard let volume = item.volume else { return false }
+        return !FileManager.default.fileExists(atPath: volume)
+    }
+
     func icon(for item: ShelfItemInfo) -> NSImage {
         if let cached = icons[item.id] { return cached }
+        // Not kept while the drive is away, so the real icon shows once it's back.
+        if isOnMissingDrive(item) { return NSWorkspace.shared.icon(for: .data) }
         let u = url(for: item)
         var image = NSWorkspace.shared.icon(forFile: u.path)
         // A picture shows itself, at thumbnail size (the shelf's tiles are small).
@@ -205,8 +213,9 @@ final class ShelfService: ActivityProvider {
               let stored = try? JSONDecoder().decode([Stored].self, from: data) else { return }
         items = stored.map(\.item)
         for s in stored { bookmarks[s.item.id] = s.bookmark }
-        // Drop items whose files are gone for good.
-        let missing = Set(items.filter { !exists($0) }.map(\.id))
+        // Drop items whose files are gone for good; ones on a drive that isn't
+        // connected right now wait for it.
+        let missing = Set(items.filter { !exists($0) && !isOnMissingDrive($0) }.map(\.id))
         if !missing.isEmpty { items.removeAll { missing.contains($0.id) }; save() }
     }
 

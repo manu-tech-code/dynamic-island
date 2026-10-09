@@ -1,3 +1,4 @@
+import CoreBluetooth
 import IOBluetooth
 import IslandCore
 import Observation
@@ -16,7 +17,10 @@ final class DevicesService: NSObject {
     @ObservationIgnored private let engine: ActivityEngine
     @ObservationIgnored private var connectNote: IOBluetoothUserNotification?
     @ObservationIgnored private var disconnectNotes: [String: IOBluetoothUserNotification] = [:]
-    @ObservationIgnored private var startedAt = Date.distantFuture
+    /// macOS reports the devices already connected as connecting once it lets
+    /// us see them: at start, or when Bluetooth permission is first given.
+    /// Until a moment after that, connections aren't news.
+    @ObservationIgnored private var quietUntil = Date.distantFuture
     /// Levels from the system report, for devices without Apple's properties.
     @ObservationIgnored private var reported: [String: BluetoothBatteryReport.Levels] = [:]
 
@@ -28,12 +32,36 @@ final class DevicesService: NSObject {
 
     func start() {
         guard connectNote == nil else { return }
-        startedAt = Date()
         connectNote = IOBluetoothDevice.register(forConnectNotifications: self, selector: #selector(deviceConnected(_:device:)))
+        if CBManager.authorization == .allowedAlways {
+            noteConnected()
+        } else {
+            // macOS is asking for Bluetooth now: the snapshot waits for the answer.
+            waitForPermission()
+        }
+        Log.info("bluetooth: \(connected.count) connected at start")
+    }
+
+    /// The devices connected now, noted without alerts.
+    private func noteConnected() {
         for case let device as IOBluetoothDevice in (IOBluetoothDevice.pairedDevices() ?? []) where device.isConnected() {
             track(device, announce: false)
         }
-        Log.info("bluetooth: \(connected.count) connected at launch")
+        quietUntil = Date().addingTimeInterval(3)
+    }
+
+    /// Up to ten minutes, for an answer to the prompt or a change in System Settings.
+    private func waitForPermission() {
+        Task { [weak self] in
+            for _ in 0..<600 {
+                try? await Task.sleep(for: .seconds(1))
+                guard let self else { return }
+                guard CBManager.authorization == .allowedAlways else { continue }
+                self.noteConnected()
+                Log.info("bluetooth: allowed, \(self.connected.count) connected")
+                return
+            }
+        }
     }
 
     /// Re-reads batteries (AirPods report them a few seconds after connecting).
@@ -81,8 +109,10 @@ final class DevicesService: NSObject {
         let box = SendableBox(device)
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
-                // The system also reports devices that were already connected when we registered.
-                let announce = Date().timeIntervalSince(self.startedAt) > 3
+                // Devices already on the list (noted at start) aren't news, nor is
+                // anything macOS reports right after letting us see Bluetooth.
+                let id = Self.id(for: box.value)
+                let announce = Date() > self.quietUntil && !self.connected.contains { $0.id == id }
                 self.track(box.value, announce: announce)
             }
         }
@@ -96,7 +126,7 @@ final class DevicesService: NSObject {
     }
 
     private func disconnected(_ device: IOBluetoothDevice) {
-        let id = device.addressString ?? device.name ?? "?"
+        let id = Self.id(for: device)
         disconnectNotes.removeValue(forKey: id)?.unregister()
         guard let info = connected.first(where: { $0.id == id }) else { return }
         connected.removeAll { $0.id == id }
@@ -132,10 +162,15 @@ final class DevicesService: NSObject {
 
     // MARK: reading a device
 
+    /// Its address, or its name for a device that doesn't give one.
+    static func id(for device: IOBluetoothDevice) -> String {
+        device.addressString ?? device.name ?? "Bluetooth device"
+    }
+
     static func info(for device: IOBluetoothDevice) -> BluetoothDeviceInfo {
         let name = device.name ?? "Bluetooth device"
         return BluetoothDeviceInfo(
-            id: device.addressString ?? name, name: name,
+            id: id(for: device), name: name,
             kind: .classify(name: name, majorClass: device.deviceClassMajor, minorClass: device.deviceClassMinor),
             battery: percent(device, "batteryPercentSingle") ?? percent(device, "batteryPercentCombined"),
             batteryLeft: percent(device, "batteryPercentLeft"),
