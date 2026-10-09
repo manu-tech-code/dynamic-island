@@ -505,11 +505,45 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         (try? JSONDecoder().decode(IslandSettings.self, from: data)) ?? IslandSettings()
     }
 
+    /// What a new install starts with on this Mac. Without a notch, the compact
+    /// island hangs below the camera's spot: beside it, the ears would cover
+    /// menus that a notch keeps clear. Without a battery, the dashboard has no
+    /// Battery widget. Modules that make macOS ask for a permission start off
+    /// (the first-run window offers them), unless macOS already allowed it.
+    public static func newInstall(on mac: MacTraits) -> IslandSettings {
+        var s = IslandSettings()
+        if !mac.hasNotch { s.compactStyle = .below }
+        if !mac.hasBattery { s.dashboard.removeAll { $0.kind == .battery } }
+        for kind in ActivityKind.asksPermission where !mac.allowed.contains(kind) {
+            s[module: kind].enabled = false
+        }
+        return s
+    }
+
     public func encoded() -> Data {
         let e = JSONEncoder()
         e.outputFormatting = [.prettyPrinted, .sortedKeys]
         return (try? e.encode(self)) ?? Data()
     }
+}
+
+/// The Mac a new install starts on (see `IslandSettings.newInstall`).
+public struct MacTraits: Equatable, Sendable {
+    /// The display the island goes on has a camera notch.
+    public var hasNotch: Bool
+    public var hasBattery: Bool
+    /// Modules whose permission macOS already gave (say, to an earlier install).
+    public var allowed: Set<ActivityKind>
+
+    public init(hasNotch: Bool, hasBattery: Bool, allowed: Set<ActivityKind> = []) {
+        self.hasNotch = hasNotch; self.hasBattery = hasBattery; self.allowed = allowed
+    }
+}
+
+extension ActivityKind {
+    /// Modules that make macOS ask for a permission as soon as they're on:
+    /// Calendars, Bluetooth, the Downloads folder.
+    public static let asksPermission: [ActivityKind] = [.calendar, .devices, .downloads]
 }
 
 extension KeyedDecodingContainer {

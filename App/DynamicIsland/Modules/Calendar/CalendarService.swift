@@ -22,6 +22,7 @@ final class CalendarService: ActivityProvider {
     @ObservationIgnored private var boundaryTask: Task<Void, Never>?
     @ObservationIgnored private var alerted: Set<String> = []
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
+    @ObservationIgnored private var requesting = false
     static let lingerAfterStart: TimeInterval = 15 * 60
 
     init(settings: SettingsStore, engine: ActivityEngine) {
@@ -60,8 +61,12 @@ final class CalendarService: ActivityProvider {
         }
     }
 
+    /// Shows macOS's prompt (once: a request already waiting for an answer isn't repeated).
     func requestAccess() {
+        guard !requesting else { return }
+        requesting = true
         Task {
+            defer { requesting = false }
             do {
                 _ = try await store.requestFullAccessToEvents()
             } catch {

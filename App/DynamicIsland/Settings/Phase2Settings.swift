@@ -1,3 +1,4 @@
+import CoreBluetooth
 import CoreLocation
 import IslandCore
 import SwiftUI
@@ -236,6 +237,24 @@ enum LocationText {
 
     static func openSettings() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+}
+
+enum BluetoothText {
+    static func status(_ a: CBManagerAuthorization) -> String {
+        switch a {
+        case .allowedAlways: "Allowed"
+        case .denied: "Denied"
+        case .restricted: "Restricted"
+        case .notDetermined: "Not asked yet"
+        @unknown default: "Unknown"
+        }
+    }
+
+    static func openSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Bluetooth") {
             NSWorkspace.shared.open(url)
         }
     }

@@ -46,6 +46,50 @@ import Testing
     }
 }
 
+@Suite struct NewInstallTests {
+    @Test func macBookWithANotch() {
+        let s = IslandSettings.newInstall(on: MacTraits(hasNotch: true, hasBattery: true))
+        #expect(s.compactStyle == .beside)
+        #expect(s.dashboard.contains { $0.kind == .battery })
+        // Nothing asks for permission until it's turned on.
+        for kind in ActivityKind.asksPermission { #expect(!s[module: kind].enabled) }
+        #expect(s[module: .nowPlaying].enabled)
+        #expect(s[module: .timer].enabled)
+        #expect(!s.nowPlaying.waveformFollowsAudio)
+        #expect(s.hotKey == nil)
+    }
+
+    @Test func desktopWithoutANotchOrABattery() {
+        let s = IslandSettings.newInstall(on: MacTraits(hasNotch: false, hasBattery: false))
+        #expect(s.compactStyle == .below)
+        #expect(!s.dashboard.contains { $0.kind == .battery })
+        #expect(s.dashboard.contains { $0.kind == .cpu })
+    }
+
+    @Test func permissionsAlreadyGivenStayOn() {
+        let s = IslandSettings.newInstall(on: MacTraits(hasNotch: true, hasBattery: true, allowed: [.calendar]))
+        #expect(s[module: .calendar].enabled)
+        #expect(!s[module: .devices].enabled)
+        #expect(!s[module: .downloads].enabled)
+    }
+
+    @Test func newInstallChoicesAreSaved() {
+        let s = IslandSettings.newInstall(on: MacTraits(hasNotch: false, hasBattery: false))
+        let again = IslandSettings.decode(s.encoded())
+        #expect(again == s)
+        #expect(!again[module: .calendar].enabled)
+        #expect(again.compactStyle == .below)
+    }
+
+    @Test func savedSettingsWithoutModuleEntriesKeepModulesOn() {
+        // An existing user who never touched the modules keeps them on.
+        let s = IslandSettings.decode(Data(#"{"material":"glass"}"#.utf8))
+        for kind in ActivityKind.asksPermission { #expect(s[module: kind].enabled) }
+        #expect(s.compactStyle == .beside)
+        #expect(s.dashboard.contains { $0.kind == .battery })
+    }
+}
+
 @Suite struct HotKeyMenuTests {
     @Test func lettersAreLowercase() {
         #expect(HotKeySpec(keyCode: 34, carbonModifiers: HotKeySpec.command | HotKeySpec.option, label: "⌥⌘I").menuKey == "i")

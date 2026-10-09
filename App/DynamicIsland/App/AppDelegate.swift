@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var islands: IslandManager!
     private var statusItem: StatusItemController?
     private var settingsWindow: SettingsWindowController?
+    private var welcomeWindow: WelcomeWindowController?
     private var hotKey: HotKey?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -39,7 +40,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = StatusItemController(env: env, islands: islands)
         registerHotKey(env.settings.settings.hotKey)
         whenChanged({ [env] in env.settings.settings.hotKey }) { [weak self] spec in self?.registerHotKey(spec) }
-        showWelcomeIfFirstLaunch()
+        if env.settings.isNewInstall {
+            showWelcomeWindow()
+        } else {
+            showIslandTipOnce()
+        }
+    }
+
+    /// A new install (nothing saved yet): what the island does and the features
+    /// that need permission. Once it closes, the settings are saved, so it never
+    /// shows again, and the island's tip follows.
+    private func showWelcomeWindow() {
+        let window = WelcomeWindowController(env: env) { [weak self] in
+            guard let self else { return }
+            self.env.settings.saveNow()
+            self.showIslandTipOnce()
+            // Released after the window has finished closing.
+            Task { self.welcomeWindow = nil }
+        }
+        welcomeWindow = window
+        window.show()
     }
 
     /// None set (the default) registers nothing. One another app holds fails,
@@ -59,7 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// A one-time tip, so the dashboard button and right-click are discoverable.
-    private func showWelcomeIfFirstLaunch() {
+    private func showIslandTipOnce() {
         let key = "didShowWelcome"
         guard !UserDefaults.standard.bool(forKey: key) else { return }
         UserDefaults.standard.set(true, forKey: key)

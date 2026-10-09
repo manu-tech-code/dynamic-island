@@ -81,7 +81,11 @@ final class AppEnvironment {
         updates.start()
         clipboard.start()
         shortcuts.reload()
-        // Modules that ask for permission start only when they're on.
+        // Modules that ask for permission start only when they're on, and turning
+        // one on (in the first-run window or Settings) is what makes macOS ask.
+        whenChanged({ [settings] in settings.settings[module: .calendar].enabled }) { [weak self] on in
+            if on, self?.calendar.access == .notDetermined { self?.calendar.requestAccess() }
+        }
         whenChanged({ [settings] in settings.settings[module: .downloads].enabled }) { [weak self] on in
             on ? self?.downloads.start() : self?.downloads.stop()
         }

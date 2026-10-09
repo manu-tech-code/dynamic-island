@@ -1,3 +1,4 @@
+import CoreBluetooth
 import IslandCore
 import SwiftUI
 
@@ -730,15 +731,22 @@ private struct PermissionsPane: View {
     @Environment(AppEnvironment.self) private var env
     @State private var music = AutomationPermission.unknown
     @State private var spotify = AutomationPermission.unknown
+    /// Not observable: read when the pane appears and every couple of seconds while it shows.
+    @State private var bluetooth = CBManager.authorization
 
     var body: some View {
+        let s = env.settings.settings
         Form {
             Section {
                 PermissionRow(title: "Calendars", symbol: "calendar", color: .red,
                               reason: "Your next event and its Join button",
                               status: calendarStatus) {
                     switch env.calendar.access {
-                    case .notDetermined: Button("Allow") { env.calendar.requestAccess() }
+                    case .notDetermined:
+                        Button("Allow") {
+                            env.settings.settings[module: .calendar].enabled = true
+                            env.calendar.requestAccess()
+                        }
                     case .denied: Button("Open Settings") { env.calendar.openPrivacySettings() }
                     case .granted: EmptyView()
                     }
@@ -749,7 +757,7 @@ private struct PermissionsPane: View {
                     automationButton(bundleID: MusicScripting.bundleID, status: music) { music = $0 }
                 }
                 PermissionRow(title: "Accessibility", symbol: "accessibility", color: .blue,
-                              reason: "Only for the volume and brightness HUD, to take over those keys",
+                              reason: "The volume and brightness HUD, to take over those keys, and messages on the island",
                               status: env.hud.accessibilityTrusted ? "Allowed" : "Not allowed") {
                     if !env.hud.accessibilityTrusted {
                         Button("Allow") { env.hud.requestAccessibility() }
@@ -766,10 +774,29 @@ private struct PermissionsPane: View {
                 }
                 PermissionRow(title: "Bluetooth", symbol: "dot.radiowaves.left.and.right", color: .indigo,
                               reason: "AirPods and other devices connecting, with batteries",
-                              status: env.settings.settings[module: .devices].enabled ? "Asked when first used" : "Module off") { EmptyView() }
+                              status: BluetoothText.status(bluetooth)) {
+                    switch bluetooth {
+                    case .notDetermined:
+                        // Turning the module on is what asks.
+                        if !s[module: .devices].enabled { Button("Allow") { env.settings.settings[module: .devices].enabled = true } }
+                    case .denied: Button("Open Settings") { BluetoothText.openSettings() }
+                    default: EmptyView()
+                    }
+                }
                 PermissionRow(title: "Downloads folder", symbol: "arrow.down.circle.fill", color: .blue,
                               reason: "Progress of downloads arriving there",
-                              status: env.settings.settings[module: .downloads].enabled ? "Asked when first used" : "Module off") { EmptyView() }
+                              status: s[module: .downloads].enabled ? "Asked when a download first finishes" : "Module off") {
+                    if !s[module: .downloads].enabled { Button("Turn On") { env.settings.settings[module: .downloads].enabled = true } }
+                }
+                PermissionRow(title: "System Audio Recording", symbol: "waveform", color: .purple,
+                              reason: "Only for the waveform following the music; macOS shows its purple dot while it listens",
+                              status: s.nowPlaying.waveformFollowsAudio ? "Asked when the waveform first moves" : "Not used") {
+                    if s.nowPlaying.waveformFollowsAudio {
+                        Button("Open Settings") { Self.openAudioRecordingSettings() }
+                    } else {
+                        Button("Turn On") { env.settings.settings.nowPlaying.waveformFollowsAudio = true }
+                    }
+                }
                 PermissionRow(title: "Automation · Spotify", symbol: "music.note.list", color: .green,
                               reason: "Fallback track info if system Now Playing is unavailable",
                               status: spotify.label) {
@@ -778,16 +805,29 @@ private struct PermissionsPane: View {
             } header: {
                 Text("What Dynamic Island can access")
             } footer: {
-                Text("Nothing else is needed yet. When the volume HUD arrives it will ask for Accessibility, and only when you turn it on.")
+                Text("macOS asks for each of these only when you turn on what needs it.")
             }
             Section("What leaves your Mac") {
+                LabeledContent("Updates", value: "Once a day the app asks github.com whether there's a newer version; when there is, its release notes come from api.github.com. Turn this off in About")
                 LabeledContent("Lyrics", value: "Title, artist, album and length go to lrclib.net, only when you open lyrics")
-                LabeledContent("Weather", value: "Coordinates rounded to about 1 km go to open-meteo.com, only while a weather widget is on your dashboard")
+                LabeledContent("Weather", value: "Coordinates rounded to about 1 km go to open-meteo.com, only while a weather widget is on your dashboard, and so do cities you search for. Apple Maps names the place")
                 LabeledContent("Clipboard", value: "Off unless you turn it on; history stays in memory and is never sent anywhere")
                 LabeledContent("Everything else", value: "Stays on this Mac")
             }
         }
         .onAppear(perform: refresh)
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                bluetooth = CBManager.authorization
+            }
+        }
+    }
+
+    static func openAudioRecordingSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     private var calendarStatus: String {
@@ -801,6 +841,7 @@ private struct PermissionsPane: View {
     private func refresh() {
         music = AutomationPermission.status(for: MusicScripting.bundleID)
         spotify = AutomationPermission.status(for: "com.spotify.client")
+        bluetooth = CBManager.authorization
     }
 
     @ViewBuilder
