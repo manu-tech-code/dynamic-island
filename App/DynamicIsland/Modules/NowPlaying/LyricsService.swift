@@ -47,7 +47,7 @@ final class LyricsService {
 
     // MARK: LRCLIB
 
-    private struct Track: Decodable {
+    nonisolated private struct Track: Decodable {
         let trackName: String?
         let artistName: String?
         let duration: Double?
