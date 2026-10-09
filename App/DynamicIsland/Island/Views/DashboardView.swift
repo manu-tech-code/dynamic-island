@@ -50,8 +50,9 @@ struct DashboardView: View {
                 }
             } trailing: {
                 if env.battery.info.hasBattery {
-                    Text("\(env.battery.info.percent)%").monospacedDigit()
-                    Image(systemName: env.battery.info.isCharging ? "battery.100percent.bolt" : "battery.75percent")
+                    if s.battery.showPercent { Text("\(env.battery.info.percent)%").monospacedDigit() }
+                    // Filled to the real charge (it was a fixed three-quarters symbol).
+                    BatteryGlyph(percent: env.battery.info.percent, charging: env.battery.info.isCharging)
                 }
                 if s[module: .shelf].enabled {
                     IslandIconButton(systemName: env.shelf.items.isEmpty ? "tray" : "tray.full.fill", size: 24,
