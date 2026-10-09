@@ -79,7 +79,9 @@ struct WelcomeView: View {
             }
             Divider()
             HStack {
-                Text("You can change all of this later in Settings.").font(.callout).foregroundStyle(.secondary)
+                Text("Change any of this later in Settings, where you can also set a keyboard shortcut for the dashboard.")
+                    .font(.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 Button("Continue", action: done)
                     .keyboardShortcut(.defaultAction)
