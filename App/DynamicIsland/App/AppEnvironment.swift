@@ -32,6 +32,8 @@ final class AppEnvironment {
     let updates: UpdateService
 
     @ObservationIgnored var openSettings: () -> Void = {}
+    /// The dashboard's keyboard shortcut couldn't be registered: another app has it.
+    var hotKeyTaken = false
 
     init() {
         let settings = SettingsStore()
@@ -78,8 +80,11 @@ final class AppEnvironment {
         lock.start()
         updates.start()
         clipboard.start()
-        shortcuts.reload()
-        // Modules that ask for permission start only when they're on.
+        // Modules that ask for permission start only when they're on, and turning
+        // one on (in the first-run window or Settings) is what makes macOS ask.
+        whenChanged({ [settings] in settings.settings[module: .calendar].enabled }) { [weak self] on in
+            if on, self?.calendar.access == .notDetermined { self?.calendar.requestAccess() }
+        }
         whenChanged({ [settings] in settings.settings[module: .downloads].enabled }) { [weak self] on in
             on ? self?.downloads.start() : self?.downloads.stop()
         }

@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import IslandCore
 
 /// A system-wide keyboard shortcut via Carbon's RegisterEventHotKey. Unlike a
 /// global key monitor this needs no Accessibility or Input Monitoring permission.
@@ -44,5 +45,16 @@ final class HotKey {
             MainActor.assumeIsolated { HotKey.handlers[id]?() }
             return noErr
         }, 1, &spec, nil, nil)
+    }
+}
+
+extension NSEvent.ModifierFlags {
+    /// From Carbon's modifier bits, as a `HotKeySpec` keeps them.
+    init(carbon: Int) {
+        self = []
+        if carbon & HotKeySpec.command != 0 { insert(.command) }
+        if carbon & HotKeySpec.shift != 0 { insert(.shift) }
+        if carbon & HotKeySpec.option != 0 { insert(.option) }
+        if carbon & HotKeySpec.control != 0 { insert(.control) }
     }
 }

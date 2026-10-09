@@ -20,10 +20,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var islands: IslandManager!
     private var statusItem: StatusItemController?
     private var settingsWindow: SettingsWindowController?
+    private var welcomeWindow: WelcomeWindowController?
     private var hotKey: HotKey?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        Log.info("launch · \(ProcessInfo.processInfo.operatingSystemVersionString) · \(Bundle.main.bundleURL.path)")
+        Log.info("launch · \(ProcessInfo.processInfo.operatingSystemVersionString) · \((Bundle.main.bundleURL.path as NSString).abbreviatingWithTildeInPath)")
         let settingsWindow = SettingsWindowController(env: env)
         self.settingsWindow = settingsWindow
         // Opening Settings from anywhere (the dashboard's gear, Add Widgets…, a menu,
@@ -39,20 +40,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = StatusItemController(env: env, islands: islands)
         registerHotKey(env.settings.settings.hotKey)
         whenChanged({ [env] in env.settings.settings.hotKey }) { [weak self] spec in self?.registerHotKey(spec) }
-        showWelcomeIfFirstLaunch()
+        if env.settings.isNewInstall {
+            showWelcomeWindow()
+        } else {
+            showIslandTipOnce()
+        }
     }
 
-    private func registerHotKey(_ spec: HotKeySpec) {
+    /// A new install (nothing saved yet): what the island does and the features
+    /// that need permission. Once it closes, the settings are saved, so it never
+    /// shows again, and the island's tip follows.
+    private func showWelcomeWindow() {
+        let window = WelcomeWindowController(env: env) { [weak self] in
+            guard let self else { return }
+            self.env.settings.saveNow()
+            self.showIslandTipOnce()
+            // Released after the window has finished closing.
+            Task { self.welcomeWindow = nil }
+        }
+        welcomeWindow = window
+        window.show()
+    }
+
+    /// None set (the default) registers nothing. One another app holds fails,
+    /// and Settings says so.
+    private func registerHotKey(_ spec: HotKeySpec?) {
         hotKey = nil
+        guard let spec else {
+            env.hotKeyTaken = false
+            Log.info("hotkey: none")
+            return
+        }
         hotKey = HotKey(keyCode: spec.keyCode, modifiers: spec.carbonModifiers) { [weak self] in
             self?.islands.toggleDashboard()
         }
+        env.hotKeyTaken = hotKey == nil
         Log.info("hotkey \(spec.label) \(hotKey == nil ? "failed" : "registered")")
     }
 
     /// A one-time tip, so the dashboard button and right-click are discoverable.
-    private func showWelcomeIfFirstLaunch() {
-        let key = "didShowWelcome"
+    private func showIslandTipOnce() {
+        let key = SettingsStore.launchedBeforeKey
         guard !UserDefaults.standard.bool(forKey: key) else { return }
         UserDefaults.standard.set(true, forKey: key)
         Task { [env] in
@@ -79,7 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let command = url.host ?? url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let query = Dictionary(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.map { ($0.name, $0.value ?? "") } ?? [],
                                uniquingKeysWith: { $1 })
-        Log.info("url command: \(command) \(query)")
+        Log.info("url command: \(command) \(private: query)")
         switch command {
         case "dashboard": islands.toggleDashboard()
         case "collapse": islands.controllers.values.forEach { $0.model.collapse() }
@@ -308,6 +336,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     Log.info("render message-\(name) outer \(model.outerSize)")
                 }
             }
+        case "debug-welcome":
+            // The first-run window, to look at (closing it saves the settings as they are).
+            showWelcomeWindow()
         case "debug-render-agents":
             // dynamicisland://debug-render-agents — each card, small and medium, once the week is read.
             let model = IslandViewModel(env: env, notch: NotchRect(rect: CGRect(x: 0, y: 0, width: 185, height: 32), isHardware: false))

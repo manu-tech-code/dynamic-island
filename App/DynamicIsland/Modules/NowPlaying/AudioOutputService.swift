@@ -6,9 +6,14 @@ struct AudioOutputDevice: Identifiable, Equatable {
     let id: AudioDeviceID
     let name: String
     let transport: UInt32
+    /// What a built-in output plays through now: the speakers, or headphones in the jack.
+    var dataSource: UInt32?
 
     var isVirtual: Bool { transport == kAudioDeviceTransportTypeVirtual || transport == kAudioDeviceTransportTypeAggregate }
 
+    /// The icon, from how the output is connected rather than its name, which
+    /// macOS translates for built-in outputs. A Bluetooth device's name comes
+    /// from its maker, the same in every language, so product names still help.
     var symbolName: String {
         let n = name.lowercased()
         switch transport {
@@ -21,10 +26,17 @@ struct AudioOutputDevice: Identifiable, Equatable {
         case kAudioDeviceTransportTypeAirPlay: return "airplayaudio"
         case kAudioDeviceTransportTypeHDMI, kAudioDeviceTransportTypeDisplayPort: return "tv"
         case kAudioDeviceTransportTypeUSB, kAudioDeviceTransportTypeThunderbolt: return "hifispeaker.fill"
-        case kAudioDeviceTransportTypeBuiltIn: return n.contains("headphone") ? "headphones" : "laptopcomputer"
+        case kAudioDeviceTransportTypeBuiltIn:
+            if dataSource == Self.headphonesSource { return "headphones" }
+            return Self.isLaptop ? "laptopcomputer" : "desktopcomputer"
         default: return "waveform"
         }
     }
+
+    /// The built-in output's headphone jack ('hdpn').
+    static let headphonesSource: UInt32 = 0x6864_706E
+    /// A Mac with a battery is a laptop; the others' speakers are in a desktop.
+    private static let isLaptop = BatteryService.read().hasBattery
 }
 
 /// System sound output: the device list, which one is the default, and its volume.
@@ -45,6 +57,11 @@ final class AudioOutputService {
     @ObservationIgnored private var volumeListener: (device: AudioDeviceID, block: AudioObjectPropertyListenerBlock)?
 
     var current: AudioOutputDevice? { devices.first { $0.id == defaultID } }
+
+    /// The output's volume can be changed from here. Some displays and audio
+    /// interfaces have no software volume; their keys are left to macOS.
+    var canSetVolume: Bool { Self.settable(defaultID, kAudioHardwareServiceDeviceProperty_VirtualMainVolume) }
+    var canMute: Bool { Self.settable(defaultID, kAudioDevicePropertyMute) }
 
     func start() {
         guard !started else { return }
@@ -80,7 +97,7 @@ final class AudioOutputService {
         var id = device.id
         var addr = Self.address(kAudioHardwarePropertyDefaultOutputDevice)
         let status = AudioObjectSetPropertyData(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, UInt32(MemoryLayout<AudioDeviceID>.size), &id)
-        if status != noErr { Log.error("set default output to \(device.name) failed: \(status)") }
+        if status != noErr { Log.error("set default output to \(private: device.name) failed: \(status)") }
         refresh()
     }
 
@@ -111,6 +128,15 @@ final class AudioOutputService {
         }
     }
 
+    /// Has the property and can set it. If Core Audio can't say, it's taken as settable.
+    private static func settable(_ id: AudioDeviceID, _ selector: AudioObjectPropertySelector) -> Bool {
+        guard id != 0 else { return false }
+        var addr = address(selector, scope: kAudioDevicePropertyScopeOutput)
+        guard AudioObjectHasProperty(id, &addr) else { return false }
+        var settable: DarwinBoolean = true
+        return AudioObjectIsPropertySettable(id, &addr, &settable) != noErr || settable.boolValue
+    }
+
     private static func mute(of id: AudioDeviceID) -> Bool? {
         guard id != 0 else { return nil }
         var addr = address(kAudioDevicePropertyMute, scope: kAudioDevicePropertyScopeOutput)
@@ -126,8 +152,9 @@ final class AudioOutputService {
         AudioObjectPropertyAddress(mSelector: selector, mScope: scope, mElement: kAudioObjectPropertyElementMain)
     }
 
-    private static func uint32(_ id: AudioObjectID, _ selector: AudioObjectPropertySelector) -> UInt32? {
-        var addr = address(selector)
+    private static func uint32(_ id: AudioObjectID, _ selector: AudioObjectPropertySelector,
+                               scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal) -> UInt32? {
+        var addr = address(selector, scope: scope)
         var value: UInt32 = 0
         var size = UInt32(MemoryLayout<UInt32>.size)
         return AudioObjectGetPropertyData(id, &addr, 0, nil, &size, &value) == noErr ? value : nil
@@ -160,7 +187,8 @@ final class AudioOutputService {
             var streams = address(kAudioDevicePropertyStreams, scope: kAudioDevicePropertyScopeOutput)
             var streamSize: UInt32 = 0
             guard AudioObjectGetPropertyDataSize(id, &streams, 0, nil, &streamSize) == noErr, streamSize > 0 else { return nil }
-            return AudioOutputDevice(id: id, name: name(id), transport: uint32(id, kAudioDevicePropertyTransportType) ?? 0)
+            return AudioOutputDevice(id: id, name: name(id), transport: uint32(id, kAudioDevicePropertyTransportType) ?? 0,
+                                     dataSource: uint32(id, kAudioDevicePropertyDataSource, scope: kAudioDevicePropertyScopeOutput))
         }
     }
 }

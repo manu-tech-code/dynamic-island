@@ -118,7 +118,7 @@ enum MusicScripting {
     }
 
     /// Returns stdout, or nil if the script failed or took longer than `timeout`.
-    nonisolated static func run(_ source: String, timeout: TimeInterval = 5) async -> String? {
+    nonisolated static func run(_ source: String, timeout: TimeInterval = 5, logsErrors: Bool = true) async -> String? {
         await withCheckedContinuation { continuation in
             let p = Process()
             p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
@@ -130,7 +130,8 @@ enum MusicScripting {
                 let data = out.fileHandleForReading.readDataToEndOfFile()
                 let errText = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
                 if proc.terminationStatus != 0 {
-                    Log.error("osascript failed (\(proc.terminationStatus)): \(errText.trimmingCharacters(in: .whitespacesAndNewlines))")
+                    // Its message can quote a track or a speaker by name.
+                    if logsErrors { Log.error("osascript failed (\(proc.terminationStatus)): \(private: errText.trimmingCharacters(in: .whitespacesAndNewlines))") }
                     continuation.resume(returning: nil)
                 } else {
                     continuation.resume(returning: String(data: data, encoding: .utf8)?.trimmingCharacters(in: .newlines))

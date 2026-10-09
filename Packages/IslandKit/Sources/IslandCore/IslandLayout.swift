@@ -267,6 +267,30 @@ public enum IslandMetrics {
     /// Recent messages: the ears, then four rows (more scroll).
     public static let recentMessages = CGSize(width: 560, height: 250)
 
+    // MARK: the window
+
+    /// The compact island never gets wider than this, even with no limit set:
+    /// past it, background app icons and then extra activities leave it, as
+    /// with the limit in Settings.
+    public static let compactWidest = IslandSettings.compactMaxWidthRange.upperBound
+    /// Room around the island for the artwork's glow.
+    public static let glowMargin: CGFloat = 44
+
+    /// The island's window: as wide and as tall as the island can get (the
+    /// dashboard at the widest width with every row, the compact island at its
+    /// widest), plus the glow. It's clear and lets clicks through outside the
+    /// island, so the room costs nothing, and nothing is ever cut off.
+    public static func panelSize(notchHeight: CGFloat) -> CGSize {
+        let wide = IslandSettings.widthScaleRange.upperBound
+        let open = [DashboardLayout.width(scale: wide), scaled(nowPlayingDetail, wide).width, scaled(shelf, wide).width,
+                    scaled(recentMessages, wide).width] + ActivityKind.allCases.map { expandedSize(for: $0, widthScale: wide).width }
+        let width = max(open.max() ?? 0, compactWidest) + 2 * shoulder
+        let height = max(DashboardLayout.size(rows: DashboardLayout.maxRows, notchHeight: notchHeight).height,
+                         nowPlayingDetail.height, recentMessages.height,
+                         backgroundAppsExpandedSize(count: 99, widthScale: IslandSettings.widthScaleRange.lowerBound).height)
+        return CGSize(width: (width + 2 * glowMargin).rounded(.up), height: (height + glowMargin).rounded(.up))
+    }
+
     /// Content width of a compact alert's fuller ear: the icon on the left; a
     /// ring (devices) or the percentage and a ring (power) on the right.
     public static func compactAlertContent(for style: IslandAlert.Style) -> CGFloat {

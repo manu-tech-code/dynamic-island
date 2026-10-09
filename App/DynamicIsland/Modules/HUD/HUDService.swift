@@ -103,6 +103,8 @@ final class HUDService {
         let steps = settings.settings.hud.steps
         switch press.key {
         case .soundUp, .soundDown:
+            // An output without a software volume: macOS shows that it can't change it.
+            guard audio.canSetVolume else { return false }
             guard press.isDown else { return true }
             let current = Double(audio.volume ?? 0.5)
             let next = VolumeMath.step(current, up: press.key == .soundUp, steps: steps, fine: fine)
@@ -116,13 +118,17 @@ final class HUDService {
             if !press.isRepeat, feedback != flags.contains(.maskShift) { NSSound(named: "Pop")?.play() }
             return true
         case .mute:
+            guard audio.canMute else { return false }
             guard press.isDown else { return true }
             suppressVolumeHUDUntil = Date().addingTimeInterval(0.25)
             audio.setMuted(!audio.muted)
             if settings.settings.hud.showVolume { showVolume(level: Double(audio.volume ?? 0), muted: audio.muted) }
             return true
         case .brightnessUp, .brightnessDown:
-            guard let current = Brightness.get() else { return false } // let macOS handle it
+            // Only the built-in display's brightness is ours to set, and only while
+            // the pointer is on it; elsewhere (an external display, a desktop Mac)
+            // the keys go to macOS.
+            guard Brightness.pointerIsOnBuiltIn, let current = Brightness.get() else { return false }
             guard press.isDown else { return true }
             let next = VolumeMath.step(Double(current), up: press.key == .brightnessUp, steps: steps, fine: fine)
             Brightness.set(Float(next))
@@ -190,6 +196,14 @@ enum Brightness {
         var count: UInt32 = 0
         guard CGGetOnlineDisplayList(8, &ids, &count) == .success else { return nil }
         return ids.prefix(Int(count)).first { CGDisplayIsBuiltin($0) != 0 }
+    }
+
+    /// The pointer is on the built-in display.
+    static var pointerIsOnBuiltIn: Bool {
+        let p = NSEvent.mouseLocation
+        // Inclusive edges: the pointer can sit on the top row, the menu bar's.
+        guard let screen = NSScreen.screens.first(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(p) }) else { return false }
+        return CGDisplayIsBuiltin(IslandManager.displayID(screen)) != 0
     }
 
     static func get() -> Float? {

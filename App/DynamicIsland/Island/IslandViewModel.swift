@@ -37,6 +37,16 @@ final class IslandViewModel {
 
     var isPreview: Bool { forced != nil }
 
+    /// Idle on a display without a notch: there's nothing to point at, so the
+    /// pointer, clicks and scrolls go to the menu bar under it.
+    var isIdleWithoutNotch: Bool { !notch.isHardware && presentation == .idle && !isPreview }
+
+    /// The black notch drawn on a display without a camera; when idle, only if
+    /// Settings asks for it (see `NotchRect.drawsVirtualNotch`).
+    var drawsVirtualNotch: Bool {
+        notch.drawsVirtualNotch(idle: presentation == .idle && !isPreview, whenIdle: settings.virtualNotchWhenIdle)
+    }
+
     #if DEBUG
     /// Offline renders: a presentation that still behaves live (not a preview).
     var debugPresentation: IslandPresentation?
@@ -211,7 +221,12 @@ final class IslandViewModel {
     private var layoutContext: IslandMetrics.Context {
         IslandMetrics.Context(notch: notch.rect.size, style: settings.compactStyle, iconLimit: settings.backgroundApps.maxIcons,
                               dashboardButton: showsDashboardButton, widthScale: widthScale, dashboardRows: dashboardRows,
-                              compactMaxWidth: settings.compactMaxWidth > 0 ? settings.compactMaxWidth : nil)
+                              compactMaxWidth: compactMaxWidth)
+    }
+
+    /// The user's limit, or the widest the island's window has room for.
+    private var compactMaxWidth: CGFloat {
+        settings.compactMaxWidth > 0 ? settings.compactMaxWidth : IslandMetrics.compactWidest
     }
 
     /// What the compact island shows, and where: it fits its content, within the user's width limit.
@@ -298,8 +313,7 @@ final class IslandViewModel {
                 let fit = compactFit.ranked
                 let title = (track.title as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold)]).width
                 size.width = IslandMetrics.belowPeekWidth(band: size.width, titleWidth: title, secondaries: fit.secondaries.count,
-                                                          dashboardButton: showsDashboardButton,
-                                                          maxWidth: settings.compactMaxWidth > 0 ? settings.compactMaxWidth : nil)
+                                                          dashboardButton: showsDashboardButton, maxWidth: compactMaxWidth)
             }
             size.height += peekHeight
         } else if peekingDevice != nil {

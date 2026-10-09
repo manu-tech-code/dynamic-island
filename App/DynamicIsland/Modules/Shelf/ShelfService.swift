@@ -125,8 +125,16 @@ final class ShelfService: ActivityProvider {
         FileManager.default.fileExists(atPath: url(for: item).path)
     }
 
+    /// The item's drive isn't connected: it stays, dimmed, until the drive is back.
+    func isOnMissingDrive(_ item: ShelfItemInfo) -> Bool {
+        guard let volume = item.volume else { return false }
+        return !FileManager.default.fileExists(atPath: volume)
+    }
+
     func icon(for item: ShelfItemInfo) -> NSImage {
         if let cached = icons[item.id] { return cached }
+        // Not kept while the drive is away, so the real icon shows once it's back.
+        if isOnMissingDrive(item) { return NSWorkspace.shared.icon(for: .data) }
         let u = url(for: item)
         var image = NSWorkspace.shared.icon(forFile: u.path)
         // A picture shows itself, at thumbnail size (the shelf's tiles are small).
@@ -190,7 +198,7 @@ final class ShelfService: ActivityProvider {
     private func write(_ data: Data?, name: String) -> URL? {
         guard let data else { return nil }
         let url = folder.appendingPathComponent(name.replacingOccurrences(of: "/", with: "-"))
-        do { try data.write(to: url); return url } catch { Log.error("shelf write failed: \(error)"); return nil }
+        do { try data.write(to: url); return url } catch { Log.error("shelf write failed: \(private: error)"); return nil }
     }
 
     private func refresh(_ item: ShelfItemInfo, to url: URL) {
@@ -205,8 +213,9 @@ final class ShelfService: ActivityProvider {
               let stored = try? JSONDecoder().decode([Stored].self, from: data) else { return }
         items = stored.map(\.item)
         for s in stored { bookmarks[s.item.id] = s.bookmark }
-        // Drop items whose files are gone for good.
-        let missing = Set(items.filter { !exists($0) }.map(\.id))
+        // Drop items whose files are gone for good; ones on a drive that isn't
+        // connected right now wait for it.
+        let missing = Set(items.filter { !exists($0) && !isOnMissingDrive($0) }.map(\.id))
         if !missing.isEmpty { items.removeAll { missing.contains($0.id) }; save() }
     }
 
@@ -215,10 +224,17 @@ final class ShelfService: ActivityProvider {
         if let data = try? JSONEncoder().encode(stored) { try? data.write(to: storeURL, options: .atomic) }
     }
 
-    private static func stamp() -> String {
+    /// For file names: the same digits whatever the language, calendar or clock setting.
+    private static let stampFormatter: DateFormatter = {
         let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.calendar = Calendar(identifier: .gregorian)
         f.dateFormat = "yyyy-MM-dd HH.mm.ss"
-        return f.string(from: Date())
+        return f
+    }()
+
+    private static func stamp() -> String {
+        stampFormatter.string(from: Date())
     }
 }
 

@@ -54,7 +54,10 @@ final class ActivityEngine {
         if case .messages(let list, let style) = alert.style {
             Log.info("alert: \(list.count) message(s) from \(list.first?.app ?? "?") as \(style.rawValue)")
         } else {
-            Log.info("alert \(alert.style)")
+            // What kind of alert is public; what it's about (a device, a file, an event) isn't.
+            let style = String(describing: alert.style)
+            let kind = style.prefix { $0 != "(" }
+            Log.info("alert \(kind)\(private: style.dropFirst(kind.count))")
         }
         queue.append(alert)
         if self.alert == nil { showNext() }

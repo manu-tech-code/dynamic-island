@@ -45,7 +45,7 @@ final class DownloadsService: ActivityProvider {
                 MainActor.assumeIsolated { self?.finish(id) }
             }
         }
-        Log.info("downloads: watching \(dir.path)")
+        Log.info("downloads: watching \(private: dir.path)")
     }
 
     func stop() {
@@ -74,7 +74,7 @@ final class DownloadsService: ActivityProvider {
         let name = url.map { DownloadNames.clean($0.lastPathComponent) } ?? (progress.localizedDescription ?? "Download")
         downloads.append(DownloadInfo(id: id, name: name))
         refresh(id)
-        Log.info("download started: \(name)")
+        Log.info("download started: \(private: name)")
     }
 
     private func refresh(_ id: String) {
@@ -95,7 +95,7 @@ final class DownloadsService: ActivityProvider {
         let info = downloads.first { $0.id == id }
         downloads.removeAll { $0.id == id }
         let done = t.progress.fractionCompleted >= 0.99 && !t.progress.isCancelled
-        Log.info("download ended: \(info?.name ?? "?") \(done ? "complete" : "stopped")")
+        Log.info("download ended: \(private: info?.name ?? "?") \(done ? "complete" : "stopped")")
         guard done, settings.settings.downloads.alertWhenDone, let info, let url = t.fileURL else { return }
         engine.post(IslandAlert(kind: .downloads, style: .downloadFinished(name: info.name, path: finalURL(for: url).path), holdSeconds: 5))
     }

@@ -31,8 +31,10 @@ struct IslandRootView: View {
                         SpringKeyframe(1, duration: IslandMotion.bounceSettleDuration, spring: IslandMotion.bounceSettle)
                     }
                 }
+                // Idle without a notch: nothing over the menu bar, unless the virtual notch is wanted.
+                .opacity(model.isIdleWithoutNotch && !model.drawsVirtualNotch ? 0 : 1)
 
-            if !model.notch.isHardware, model.settings.virtualNotchWhenIdle || model.presentation != .idle || model.hover {
+            if model.drawsVirtualNotch {
                 // Displays without a camera housing get a virtual one.
                 NotchShape(bottomRadius: 10, shoulder: IslandMetrics.shoulder)
                     .fill(.black)

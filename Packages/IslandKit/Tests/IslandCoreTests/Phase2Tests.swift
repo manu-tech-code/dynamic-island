@@ -69,6 +69,13 @@ import Testing
         #expect(VolumeMath.step(0.51, up: true, steps: 16, fine: false) == 0.5625) // snaps to the grid
     }
 
+    @Test func shelfItemsKnowTheirDrive() {
+        #expect(ShelfItemInfo(name: "a", kind: .file, path: "/Volumes/Backup/Photos/a.jpg").volume == "/Volumes/Backup")
+        #expect(ShelfItemInfo(name: "b", kind: .folder, path: "/Volumes/My Drive").volume == "/Volumes/My Drive")
+        #expect(ShelfItemInfo(name: "c", kind: .file, path: "/Users/me/Desktop/c.txt").volume == nil)
+        #expect(ShelfItemInfo(name: "d", kind: .file, path: "/Volumes").volume == nil)
+    }
+
     @Test func downloadNames() {
         #expect(DownloadNames.clean("Report.pdf.download") == "Report.pdf")
         #expect(DownloadNames.clean("movie.mp4.crdownload") == "movie.mp4")
