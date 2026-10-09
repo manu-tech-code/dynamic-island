@@ -71,6 +71,50 @@ import Testing
         #expect(IslandSettings.decode(s.encoded()).messages.apps == ["Calendar": false, "Music": true])
     }
 
+    @Test func recentMessagesKeepTheNewestAndWhatsRead() {
+        var recent = RecentMessages(limit: 3)
+        for i in 1...4 { recent.add(MessageInfo(id: "\(i)", app: i % 2 == 0 ? "Slack" : "WhatsApp", sender: "S\(i)", text: "")) }
+        // Newest first; past the limit the oldest go.
+        #expect(recent.entries.map(\.id) == ["4", "3", "2"])
+        #expect(recent.unreadCount == 3)
+        // The same notification again moves up, unread, without a copy.
+        recent.markRead(id: "2")
+        recent.add(MessageInfo(id: "2", app: "Slack", sender: "S2", text: "edited"))
+        #expect(recent.entries.map(\.id) == ["2", "4", "3"])
+        #expect(recent.entries[0].message.text == "edited" && !recent.entries[0].read)
+        // Opening Slack reads its messages, not WhatsApp's.
+        recent.markRead(app: "Slack", bundleID: nil)
+        #expect(recent.entries.filter { !$0.read }.map(\.id) == ["3"])
+        recent.setLimit(1)
+        #expect(recent.entries.map(\.id) == ["2"])
+        recent.removeAll()
+        #expect(recent.isEmpty)
+    }
+
+    @Test func recentMessageTimes() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        #expect(IslandFormat.ago(now.addingTimeInterval(-20), from: now) == "now")
+        #expect(IslandFormat.ago(now.addingTimeInterval(-4 * 60), from: now) == "4m")
+        #expect(IslandFormat.ago(now.addingTimeInterval(-2 * 3600 - 59), from: now) == "2h")
+        #expect(IslandFormat.ago(now.addingTimeInterval(-3 * 86400), from: now) == "3d")
+    }
+
+    @Test func recentMessagesSettings() throws {
+        let s = IslandSettings()
+        #expect(s.messages.keepRecent && s.messages.recentLimit == 20)
+        // Saved before the option: on, with the default length.
+        let old = try JSONDecoder().decode(IslandSettings.self, from: Data(#"{"messages":{"style":"stack"}}"#.utf8))
+        #expect(old.messages.keepRecent && old.messages.recentLimit == 20)
+        var t = IslandSettings()
+        t.messages.recentLimit = 1000
+        #expect(t.normalized().messages.recentLimit == MessageAlertSettings.recentLimitRange.upperBound)
+        // The widget needs the module, like the others.
+        #expect(DashboardWidgetKind.messages.module == .messages)
+        t.dashboard = [DashboardItem(.messages, .medium)]
+        t[module: .messages].enabled = false
+        #expect(t.visibleDashboard.isEmpty)
+    }
+
     @Test func batteryPercentShowsUntilTurnedOff() throws {
         #expect(IslandSettings().battery.showPercent)
         // Saved before the option: still shown, the other battery settings kept.

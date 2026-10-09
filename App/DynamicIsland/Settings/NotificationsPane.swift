@@ -56,6 +56,7 @@ struct NotificationsPane: View {
                 } header: {
                     Text("How messages show")
                 }
+                RecentMessagesSection()
                 Section {
                     Toggle(isOn: $store.settings.messages.hideSystemBanner) {
                         VStack(alignment: .leading, spacing: 2) {
@@ -100,6 +101,56 @@ struct NotificationsPane: View {
     static func sample() -> MessageInfo {
         MessageInfo(id: UUID().uuidString, app: "Messages", bundleID: "com.apple.MobileSMS", sender: "Dynamic Island",
                     text: "This is how a message looks on the island. Point at it to keep it here.")
+    }
+}
+
+/// Recent messages: a list on the island of the messages that reached it, behind
+/// the dashboard's messages button and in an optional widget.
+private struct RecentMessagesSection: View {
+    @Environment(AppEnvironment.self) private var env
+
+    var body: some View {
+        @Bindable var store = env.settings
+        let s = store.settings
+        let recent = env.messages.recent
+        let onDashboard = s.dashboard.contains { $0.kind == .messages }
+        let fits = DashboardLayout.rows(s.visibleDashboard, columns: s.dashboardColumns).joined().contains { $0.kind == .messages }
+        Section {
+            Toggle(isOn: $store.settings.messages.keepRecent) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Keep recent messages")
+                    Text("The messages that reached the island stay in a list, newest first, behind the messages button at the top of the dashboard. Click one to open its conversation. They're kept until you quit, never saved.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Group {
+                Picker("Keep the last", selection: $store.settings.messages.recentLimit) {
+                    ForEach([10, 20, 50, 100], id: \.self) { Text("\($0) messages").tag($0) }
+                }
+                LabeledContent("Dashboard widget") {
+                    if !onDashboard {
+                        Button("Add to Dashboard") {
+                            withAnimation { store.settings.dashboard.append(DashboardItem(.messages, .medium)) }
+                        }
+                    } else if fits {
+                        Text("On your dashboard").foregroundStyle(.secondary)
+                    } else {
+                        HStack {
+                            Text("Past the dashboard's three rows").foregroundStyle(.orange)
+                            Button("Arrange…") { UserDefaults.standard.set(SettingsPane.dashboard.rawValue, forKey: "settings.lastPane") }
+                        }
+                    }
+                }
+                HStack {
+                    Button("Show on the Island") { AppDelegate.shared?.islands.showRecentMessages() }
+                    Button(recent.isEmpty ? "Clear the List" : "Clear the List (\(recent.entries.count))") { env.messages.clearRecent() }
+                        .disabled(recent.isEmpty)
+                }
+            }
+            .disabled(!s.messages.keepRecent)
+        } header: {
+            Text("Recent messages")
+        }
     }
 }
 

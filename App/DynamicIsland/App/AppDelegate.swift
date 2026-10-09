@@ -89,6 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let minutes = Double(query["minutes"] ?? "") ?? 5
             env.timers.start(minutes: minutes, label: query["label"].flatMap { $0.isEmpty ? nil : $0 })
         case "shelf": islands.primary?.model.openShelf()
+        case "messages": islands.showRecentMessages()
         case "lyrics": islands.primary?.showNowPlaying(page: .lyrics)
         case "up-next": islands.primary?.showNowPlaying(page: .upNext)
         case "play-pause": env.nowPlaying.togglePlayPause()
@@ -306,6 +307,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     try? rep.representation(using: .png, properties: [:])?.write(to: Log.fileURL.deletingLastPathComponent().appendingPathComponent("message-\(name).png"))
                     Log.info("render message-\(name) outer \(model.outerSize)")
                 }
+            }
+        case "debug-render-recent":
+            // dynamicisland://debug-render-recent?fill=1 — the recent list on the island and as a widget.
+            if query["fill"] == "1" { env.messages.debugFillRecent() }
+            let model = IslandViewModel(env: env, notch: NotchRect(rect: CGRect(x: 0, y: 0, width: 185, height: 32), isHardware: false))
+            func save(_ view: some View, _ name: String) {
+                let r = ImageRenderer(content: view.environment(env).environment(\.colorScheme, .dark))
+                r.scale = 2
+                if let img = r.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+                    try? rep.representation(using: .png, properties: [:])?.write(to: Log.fileURL.deletingLastPathComponent().appendingPathComponent("recent-\(name).png"))
+                    Log.info("render recent-\(name) \(Int(img.size.width))×\(Int(img.size.height))")
+                }
+            }
+            model.debugPresentation = .recentMessages
+            save(PreviewCanvas(model: model, availableWidth: 760), "island")
+            model.debugPresentation = .dashboard
+            save(PreviewCanvas(model: model, availableWidth: 760), "dashboard")
+            for size in WidgetSize.allCases {
+                save(WidgetView(item: DashboardItem(.messages, size), radius: 16, model: model)
+                    .frame(width: DashboardView.width(size, dashboardWidth: model.dashboardWidth), height: DashboardLayout.cardHeight)
+                    .padding(14).background(.black), "widget-\(size.rawValue)")
             }
         case "debug-media-rects":
             // Where each island thinks the playing track is, next to the island's own outline.

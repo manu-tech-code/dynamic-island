@@ -476,6 +476,7 @@ extension DashboardWidgetKind {
         case .clipboard: .brown
         case .shortcuts: .pink
         case .devices: .indigo
+        case .messages: .green
         }
     }
 }

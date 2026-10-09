@@ -9,7 +9,7 @@ enum NowPlayingPage: Equatable { case player, lyrics, upNext }
 /// click does. The engine decides what's live; this adds what the user opened.
 @Observable
 final class IslandViewModel {
-    enum UserState: Equatable { case none, expanded(String), dashboard, shelf }
+    enum UserState: Equatable { case none, expanded(String), dashboard, shelf, recentMessages }
 
     let env: AppEnvironment
     var notch: NotchRect
@@ -56,6 +56,7 @@ final class IslandViewModel {
         case .expanded(let id) where engine.activity(id: id) != nil: return .expanded(activityID: id)
         case .dashboard: return .dashboard
         case .shelf: return .shelf
+        case .recentMessages: return .recentMessages
         default: return ranked.isEmpty ? .idle : .compact
         }
     }
@@ -170,7 +171,7 @@ final class IslandViewModel {
 
     /// Lyrics and Up Next scroll, so scrolling there mustn't close the island.
     var hasScrollableContent: Bool {
-        if presentation == .shelf || expandedActivity?.kind == .shelf { return true }
+        if presentation == .shelf || presentation == .recentMessages || expandedActivity?.kind == .shelf { return true }
         return expandedActivity?.kind == .nowPlaying && nowPlayingPage != .player
     }
 
@@ -182,6 +183,7 @@ final class IslandViewModel {
         case .expanded(let id): "expanded-\(id)-\(nowPlayingPage)"
         case .dashboard: "dashboard"
         case .shelf: "shelf"
+        case .recentMessages: "recentMessages"
         case .alert(let a): "alert-\(a.id)"
         }
     }
@@ -348,6 +350,7 @@ final class IslandViewModel {
         switch presentation {
         case .dashboard: return DashboardLayout.width
         case .shelf: return IslandMetrics.shelf.width
+        case .recentMessages: return IslandMetrics.recentMessages.width
         case .expanded:
             guard let kind = expandedActivity?.kind else { return nil }
             return kind == .nowPlaying && nowPlayingPage != .player ? IslandMetrics.nowPlayingDetail.width : IslandMetrics.expandedSize(for: kind).width
@@ -457,7 +460,7 @@ final class IslandViewModel {
         case .idle: openDashboard()
         case .compact:
             if let primary = ranked.primary { open(primary.id) } else { openDashboard() }
-        case .expanded, .dashboard, .shelf: collapse()
+        case .expanded, .dashboard, .shelf, .recentMessages: collapse()
         case .alert:
             // A message opens its conversation.
             if let m = messageAlert?.messages.first { env.messages.open(m) }
@@ -497,6 +500,13 @@ final class IslandViewModel {
         shelfOpenedByDrag = false
         dropTargeted = false
         if userState != .shelf { openShelf() }
+    }
+
+    /// The messages that reached the island lately (the dashboard's messages button).
+    func openRecentMessages() {
+        guard userState != .recentMessages else { return }
+        env.look.refresh()
+        animate(open: true) { userState = .recentMessages }
     }
 
     func toggleDashboard() {

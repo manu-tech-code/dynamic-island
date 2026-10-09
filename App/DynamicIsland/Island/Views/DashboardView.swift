@@ -31,10 +31,16 @@ struct DashboardView: View {
         let cardRadius = max(12, model.radius - 14)
         VStack(spacing: 0) {
             EarRow(model: model) {
+                // Recent messages lead the left ear, where the app icons make room (the right one is full).
+                let messages = s[module: .messages].enabled && s.messages.keepRecent
+                if messages {
+                    RecentMessagesButton(model: model)
+                        .padding(.trailing, 4)
+                }
                 if s[module: .backgroundApps].enabled {
                     let excluded = Set(s.backgroundApps.excludedBundleIDs)
                     let apps = env.backgroundApps.apps.filter { !excluded.contains($0.bundleID ?? "") }
-                    let fit = Self.iconsThatFit(apps.count, in: model.earContentWidth)
+                    let fit = Self.iconsThatFit(apps.count, in: model.earContentWidth - (messages ? 24 + 4 + 6 : 0))
                     // One button: the icons and "+N" open the Open apps grid.
                     Button { model.open("backgroundApps") } label: {
                         HStack(spacing: IslandMetrics.glyphSpacing) {
@@ -50,7 +56,7 @@ struct DashboardView: View {
                 }
             } trailing: {
                 if env.battery.info.hasBattery {
-                    if s.battery.showPercent { Text("\(env.battery.info.percent)%").monospacedDigit() }
+                    if s.battery.showPercent { Text("\(env.battery.info.percent)%").monospacedDigit().fixedSize() }
                     // Filled to the real charge (it was a fixed three-quarters symbol).
                     BatteryGlyph(percent: env.battery.info.percent, charging: env.battery.info.isCharging)
                 }
@@ -111,6 +117,7 @@ struct WidgetView: View {
             case .clipboard: ClipboardWidget(size: item.size)
             case .shortcuts: ShortcutsWidget(size: item.size)
             case .devices: DevicesWidget(size: item.size)
+            case .messages: MessagesWidget(size: item.size, model: model)
             }
         }
     }
