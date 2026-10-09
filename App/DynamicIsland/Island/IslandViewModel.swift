@@ -72,11 +72,16 @@ final class IslandViewModel {
     /// in with its edge, under the camera. Coming out runs the same motion back.
     var isTucked: Bool {
         if let previewTuck { return previewTuck && presentation == .compact }
-        return hidesUntilHover && !revealed && !announcing && !hasUnreadBadges && presentation == .compact
+        return hidesUntilHover && !revealed && !announcing && !hasUnreadBadges && !hasWorkingAgents && presentation == .compact
     }
 
     /// Unread messages wait on the island (the badges style), even when it hides until hover.
     var hasUnreadBadges: Bool { !env.messages.activities.isEmpty && settings[module: .messages].showInCompact }
+
+    /// So do agents at work (Settings › AI Agents › Show agents while they work).
+    var hasWorkingAgents: Bool {
+        settings[module: .agents].enabled && settings[module: .agents].showInCompact && !env.agents.activities.isEmpty
+    }
 
     /// The Settings preview of the reveal: tucked or out, played by the preview itself.
     private(set) var previewTuck: Bool?
@@ -321,6 +326,7 @@ final class IslandViewModel {
             case .download(let d): "Downloading \(d.name)\(d.fraction.map { ", \(Int($0 * 100)) percent" } ?? "")"
             case .privacy(let p): p.microphone && p.camera ? "Microphone and camera in use" : p.microphone ? "Microphone in use" : "Camera in use"
             case .messages(let apps): apps.map { "\($0.count) unread in \($0.app)" }.joined(separator: ", ")
+            case .agents(let sessions): sessions.map { "\($0.agent.displayName) working in \($0.project)" }.joined(separator: ", ")
             }
         }
         if !fit.ranked.overflow.isEmpty { parts.append("and \(fit.ranked.overflow.count) more") }
@@ -461,9 +467,12 @@ final class IslandViewModel {
         case .compact:
             if let primary = ranked.primary { open(primary.id) } else { openDashboard() }
         case .expanded, .dashboard, .shelf, .recentMessages: collapse()
-        case .alert:
-            // A message opens its conversation.
+        case .alert(let alert):
+            // A message opens its conversation; a finished agent, its app or terminal.
             if let m = messageAlert?.messages.first { env.messages.open(m) }
+            if case .agentFinished(let f) = alert.style, let s = env.agents.sessions.first(where: { $0.id == f.session }) {
+                env.agents.bringForward(s)
+            }
             env.engine.dismissAlert()
         }
     }

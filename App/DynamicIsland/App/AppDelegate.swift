@@ -308,6 +308,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     Log.info("render message-\(name) outer \(model.outerSize)")
                 }
             }
+        case "debug-render-agents":
+            // dynamicisland://debug-render-agents — each card, small and medium, once the week is read.
+            let model = IslandViewModel(env: env, notch: NotchRect(rect: CGRect(x: 0, y: 0, width: 185, height: 32), isHardware: false))
+            env.agents.acquire()
+            Task {
+                for _ in 0..<40 where !env.agents.loaded { try? await Task.sleep(for: .milliseconds(250)) }
+                let grid = VStack(alignment: .leading, spacing: 10) {
+                    ForEach(AgentCardStyle.allCases) { style in
+                        HStack(spacing: 10) {
+                            ForEach(WidgetSize.allCases) { size in
+                                IslandCard(title: style.cardTitle, symbol: "sparkles", radius: 18) { AgentsWidget(size: size, model: model, style: style) }
+                                    .frame(width: DashboardView.width(size), height: DashboardLayout.cardHeight)
+                            }
+                        }
+                    }
+                }
+                .padding(14).background(.black).environment(\.colorScheme, .dark).environment(env)
+                let r = ImageRenderer(content: grid)
+                r.scale = 2
+                if let img = r.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+                    try? rep.representation(using: .png, properties: [:])?.write(to: Log.fileURL.deletingLastPathComponent().appendingPathComponent("agents-cards.png"))
+                }
+                Log.info("agents: rendered cards; \(env.agents.sessions.count) open, loaded \(env.agents.loaded)")
+                env.agents.release()
+            }
+        case "debug-agents":
+            // dynamicisland://debug-agents?show=expanded|alert|clear
+            let model = islands.primary?.model
+            switch query["show"] {
+            case "expanded": model?.debugPresentation = .expanded(activityID: "agents")
+            case "alert":
+                env.engine.post(IslandAlert(kind: .agents, style: .agentFinished(
+                    AgentFinish(id: UUID().uuidString, session: "", agent: .claudeCode, project: "dynamic_island", duration: 400)), holdSeconds: 6))
+            default: model?.debugPresentation = nil
+            }
         case "debug-render-recent":
             // dynamicisland://debug-render-recent?fill=1 — the recent list on the island and as a widget.
             if query["fill"] == "1" { env.messages.debugFillRecent() }

@@ -62,6 +62,14 @@ struct AlertView: View {
             DashboardButton(model: model, size: 28)
         case .messages:
             EmptyView() // drawn by MessageAlertView
+        case .agentFinished(let f):
+            AgentBadge(agent: f.agent, size: 30).frame(width: 36)
+            titles("\(f.agent.displayName) finished", "\(f.project) · \(IslandFormat.took(f.duration))")
+            Spacer()
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(.green)
+                .symbolEffect(.bounce, value: alert.id)
         case .updateAvailable(let version):
             symbol("arrow.down.circle.fill", Color.accentColor)
             titles("Update available", "Dynamic Island \(version)")

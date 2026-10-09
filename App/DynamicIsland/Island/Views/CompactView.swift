@@ -145,6 +145,8 @@ private struct CompactLeading: View {
             EmptyView() // its icons are placed by the ears
         case .shelf, .download, .privacy, .messages:
             Phase2Leading(payload: activity.payload)
+        case .agents(let sessions):
+            AgentsLeading(sessions: sessions, model: model)
         }
     }
 }
@@ -177,6 +179,8 @@ private struct CompactTrailing: View {
             EmptyView() // its icons are placed by the ears
         case .shelf, .download, .privacy, .messages:
             Phase2Trailing(payload: activity.payload)
+        case .agents(let sessions):
+            AgentsElapsed(sessions: sessions)
         }
     }
 }
@@ -229,6 +233,8 @@ private struct BelowBand: View {
             Spacer(minLength: 0)
         case .shelf, .download, .privacy, .messages:
             Phase2Band(payload: activity.payload)
+        case .agents(let sessions):
+            AgentsBand(sessions: sessions, model: model)
         }
     }
 }
@@ -321,6 +327,8 @@ private struct SecondaryGlyphs: View {
             }
         case .shelf, .download, .privacy, .messages:
             Phase2Glyph(payload: a.payload)
+        case .agents(let sessions):
+            AgentBadge(agent: sessions.first?.agent ?? .claudeCode, size: 18).frame(width: 20, height: 20)
         }
     }
 }
