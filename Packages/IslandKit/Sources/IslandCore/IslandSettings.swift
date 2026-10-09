@@ -505,6 +505,18 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         (try? JSONDecoder().decode(IslandSettings.self, from: data)) ?? IslandSettings()
     }
 
+    /// The defaults of version 0.12 and earlier. A Mac that ran one of them but
+    /// never changed a setting has nothing saved; it keeps these, so it works
+    /// as it did (the ⌥⌘I shortcut, the waveform following the music, the idle
+    /// virtual notch).
+    public static var earlierDefaults: IslandSettings {
+        var s = IslandSettings()
+        s.hotKey = HotKeySpec(keyCode: 34, carbonModifiers: HotKeySpec.command | HotKeySpec.option, label: "⌥⌘I")
+        s.virtualNotchWhenIdle = true
+        s.nowPlaying.waveformFollowsAudio = true
+        return s
+    }
+
     /// What a new install starts with on this Mac. Without a notch, the compact
     /// island hangs below the camera's spot: beside it, the ears would cover
     /// menus that a notch keeps clear. Without a battery, the dashboard has no

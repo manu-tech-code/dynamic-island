@@ -18,12 +18,20 @@ final class SettingsStore {
 
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let key = "settings.v1"
+    /// Set at the first launch of every version since 0.3 (the island's one-time tip).
+    static let launchedBeforeKey = "didShowWelcome"
 
     init(defaults: UserDefaults = .standard, mac: @autoclosure () -> MacTraits = .current) {
         self.defaults = defaults
         if let data = defaults.data(forKey: key) {
             settings = IslandSettings.decode(data)
             isNewInstall = false
+        } else if defaults.bool(forKey: Self.launchedBeforeKey) {
+            // An earlier version ran, but nothing was changed, so nothing was saved:
+            // its defaults stay, saved now so newer defaults never replace them.
+            settings = IslandSettings.earlierDefaults
+            isNewInstall = false
+            save()
         } else {
             settings = IslandSettings.newInstall(on: mac())
             isNewInstall = true

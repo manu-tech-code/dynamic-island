@@ -80,7 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// A one-time tip, so the dashboard button and right-click are discoverable.
     private func showIslandTipOnce() {
-        let key = "didShowWelcome"
+        let key = SettingsStore.launchedBeforeKey
         guard !UserDefaults.standard.bool(forKey: key) else { return }
         UserDefaults.standard.set(true, forKey: key)
         Task { [env] in

@@ -39,6 +39,21 @@ import Testing
         #expect(s.hotKey == nil)
     }
 
+    @Test func anEarlierInstallWithNothingSavedKeepsItsDefaults() {
+        let s = IslandSettings.earlierDefaults
+        #expect(s.hotKey?.label == "⌥⌘I")
+        #expect(s.hotKey?.menuKey == "i")
+        #expect(s.virtualNotchWhenIdle)
+        #expect(s.nowPlaying.waveformFollowsAudio)
+        // Everything else is today's default, and modules stay on.
+        var rest = s
+        rest.hotKey = nil
+        rest.virtualNotchWhenIdle = false
+        rest.nowPlaying.waveformFollowsAudio = false
+        #expect(rest == IslandSettings())
+        #expect(IslandSettings.decode(s.encoded()) == s)
+    }
+
     @Test func aBrokenShortcutMeansNone() {
         let s = IslandSettings.decode(Data(#"{"hotKey":{"keyCode":"x"},"material":"black"}"#.utf8))
         #expect(s.hotKey == nil)
