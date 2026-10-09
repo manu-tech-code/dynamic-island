@@ -399,7 +399,7 @@ public struct IslandAlert: Identifiable, Equatable, Sendable {
         case updateAvailable(version: String)
         /// Messages from another app, newest first, in the style chosen in Settings.
         case messages([MessageInfo], MessageAlertStyle)
-        /// An AI agent finished and waits for you.
+        /// An AI agent finished and waits for you, or stopped to ask you something.
         case agentFinished(AgentFinish)
     }
 

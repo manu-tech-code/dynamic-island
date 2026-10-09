@@ -34,13 +34,33 @@ public enum IslandFormat {
         }
     }
 
-    /// Dollars, short: "$0.42", "$12.40", "$123", "$1.2K".
-    public static func dollars(_ v: Double) -> String {
-        switch max(0, v) {
-        case 1000...: String(format: "$%.1fK", v / 1000)
-        case 100...: String(format: "$%.0f", v)
-        default: String(format: "$%.2f", max(0, v))
+    /// US dollars, short, the way your region writes them: "$0.42", "$12.40",
+    /// "$123", "$1.2K" (in Germany "0,42 $").
+    public static func dollars(_ v: Double, locale: Locale = .autoupdatingCurrent) -> String {
+        let usd = FloatingPointFormatStyle<Double>.Currency(code: "USD", locale: locale)
+        let v = max(0, v)
+        return switch v {
+        case 1000...: v.formatted(usd.notation(.compactName).precision(.fractionLength(0...1)))
+        case 100...: v.formatted(usd.precision(.fractionLength(0)))
+        default: v.formatted(usd.precision(.fractionLength(2)))
         }
+    }
+
+    /// What work cost when some of it was done by models without a price:
+    /// "≥ $1.20", or "—" when none of it had one.
+    public static func cost(_ v: Double, unpriced: Int, locale: Locale = .autoupdatingCurrent) -> String {
+        guard unpriced > 0 else { return dollars(v, locale: locale) }
+        return v > 0 ? "≥ " + dollars(v, locale: locale) : "—"
+    }
+
+    /// An hour of the day on a clock, the way your region writes it: "6 PM", or "18".
+    public static func hour(_ h: Int, locale: Locale = .autoupdatingCurrent) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let date = calendar.date(from: DateComponents(year: 2026, month: 1, day: 1, hour: h)) ?? .now
+        var style = Date.FormatStyle.dateTime.hour().locale(locale)
+        style.timeZone = calendar.timeZone
+        return date.formatted(style)
     }
 
     /// A clock that counts up, for an agent at work: "0:42", "4:12", then "1h 05".

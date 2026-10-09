@@ -179,12 +179,13 @@ struct AgentSessionRow: View {
                     TimelineView(.periodic(from: .now, by: session.state == .working ? 1 : 60)) { ctx in
                         Text(state(at: ctx.date))
                             .font(.system(size: compact ? 10.5 : 11.5))
-                            .foregroundStyle(session.state == .working ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
+                            .foregroundStyle(stateStyle)
                             .lineLimit(1)
                     }
                 }
                 Spacer(minLength: 4)
-                let cost = env.settings.settings.agents.showCost ? env.agents.ledger.cost(of: session).flatMap { $0 > 0 ? IslandFormat.dollars($0) : nil } : nil
+                let spent = env.settings.settings.agents.showCost ? env.agents.ledger.cost(of: session) : nil
+                let cost = spent.flatMap { $0.cost > 0 ? IslandFormat.cost($0.cost, unpriced: $0.unpriced) : nil }
                 if !compact {
                     Text([session.agent.displayName, cost].compactMap { $0 }.joined(separator: " · "))
                         .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
@@ -202,10 +203,22 @@ struct AgentSessionRow: View {
         .help(session.pid == nil ? session.folder : "Bring \(session.agent.displayName) forward")
     }
 
+    private var stateStyle: AnyShapeStyle {
+        switch session.state {
+        case .working: AnyShapeStyle(.green)
+        case .needsYou: AnyShapeStyle(.orange)
+        case .waiting: AnyShapeStyle(.secondary)
+        }
+    }
+
     private func state(at now: Date) -> String {
         let gone = now.timeIntervalSince(session.since)
         switch session.state {
         case .working: return "Working · \(IslandFormat.elapsed(gone))"
+        case .needsYou:
+            // "Needs you · approve Bash"
+            guard !short, let reason = session.reason else { return "Needs you" }
+            return "Needs you · \(reason)"
         case .waiting:
             let waiting = short ? "Waiting" : "Waiting for you"
             return gone < 60 ? waiting : "\(waiting) · \(IslandFormat.took(gone).replacingOccurrences(of: #" \d+ s$"#, with: "", options: .regularExpression))"
@@ -278,9 +291,10 @@ private struct AgentsOverviewCard: View {
 
     var body: some View {
         let agents = env.agents
-        let window = agents.shown.contains(.claudeCode) ? agents.ledger.window(now: now) : nil
+        let window = agents.shown.contains(.claudeCode) && agents.claudeSubscription ? agents.ledger.window(now: now) : nil
+        let limits = agents.shown.contains(.codex) ? agents.ledger.limits(.codex, now: now) : []
         VStack(alignment: .leading, spacing: 6) {
-            ForEach(shownAgents(env).prefix(window == nil ? 4 : 3), id: \.self) { a in
+            ForEach(shownAgents(env).prefix(window == nil && limits.isEmpty ? 4 : 3), id: \.self) { a in
                 let working = agents.sessions.filter { $0.agent == a && $0.state == .working }.count
                 HStack(spacing: 6) {
                     AgentBadge(agent: a, size: 15)
@@ -304,14 +318,16 @@ private struct AgentsOverviewCard: View {
                 }
                 .font(.system(size: 10.5))
                 MeterBar(fraction: window.fraction(now: now), color: AgentKind.claudeCode.color)
-            } else if let limit = agents.ledger.limits[.codex], agents.shown.contains(.codex) {
+            } else if let most = limits.max(by: { $0.usedPercent < $1.usedPercent }) {
+                // Codex's limits (5 hours, the week), the nearest to running out filling the bar.
                 HStack {
-                    Text("Codex limit").foregroundStyle(.secondary)
-                    Spacer()
-                    Text("\(Int(limit.usedPercent.rounded()))% used").fontWeight(.semibold)
+                    Text(size == .small ? "Codex" : "Codex limits").foregroundStyle(.secondary).lineLimit(1)
+                    Spacer(minLength: 4)
+                    Text(limits.map { [$0.name, "\(Int($0.usedPercent.rounded()))%"].compactMap { $0 }.joined(separator: " ") }.joined(separator: " · "))
+                        .fontWeight(.semibold).lineLimit(1)
                 }
                 .font(.system(size: 10.5))
-                MeterBar(fraction: limit.usedPercent / 100, color: AgentKind.codex.color)
+                MeterBar(fraction: most.usedPercent / 100, color: AgentKind.codex.color)
             }
         }
     }
@@ -323,13 +339,14 @@ private struct AgentsOverviewCard: View {
         let medium = size == .medium
         let cost = env.settings.settings.agents.showCost && today.cost > 0
         if today.replies > 0 {
-            if !a.countsTokens { return "\(today.replies) prompt\(today.replies == 1 ? "" : "s") today" }
             if cost {
                 // The tokens are on the Today card; here, what the day cost.
-                return "\(IslandFormat.dollars(today.cost)) today"
+                return "\(IslandFormat.cost(today.cost, unpriced: today.unpriced)) today"
             }
             return medium ? "\(today.replies.formatted()) replies · \(IslandFormat.tokens(today.tokens)) tokens" : "\(IslandFormat.tokens(today.tokens)) today"
         }
+        // Antigravity CLI keeps only your prompts.
+        if today.prompts > 0 { return "\(today.prompts) prompt\(today.prompts == 1 ? "" : "s") today" }
         let week = ledger.week(a, now: now)
         if week.sessions > 0 { return medium ? "\(week.sessions) session\(week.sessions == 1 ? "" : "s") this week" : "\(week.sessions) this week" }
         return medium ? "Nothing this week" : "Quiet"
@@ -357,6 +374,9 @@ private struct AgentWindowCard: View {
         .frame(width: ringSize, height: ringSize)
         if !agents.shown.contains(.claudeCode) {
             AgentsPlaceholder(text: "Claude Code isn't on this Mac, or is switched off")
+        } else if !agents.claudeSubscription {
+            // With an API key, usage isn't counted in windows.
+            AgentsPlaceholder(text: "No 5-hour window: Claude Code isn't signed in with a Claude plan")
         } else if size == .small {
             VStack(spacing: 6) {
                 ring
@@ -372,13 +392,14 @@ private struct AgentWindowCard: View {
                 let cost = env.settings.settings.agents.showCost
                 VStack(alignment: .leading, spacing: 5) {
                     if cost {
-                        stat(IslandFormat.dollars(window?.cost ?? 0),
+                        stat(IslandFormat.cost(window?.cost ?? 0, unpriced: window?.unpriced ?? 0),
                              window.map { "this window · \(IslandFormat.tokens($0.tokens)) tokens" } ?? "no window open")
                     } else {
                         stat(window.map { IslandFormat.tokens($0.tokens) } ?? "0",
                              window.map { "tokens this window · resets \($0.resets.formatted(date: .omitted, time: .shortened))" } ?? "tokens · no window open")
                     }
-                    stat(today.replies.formatted(), cost ? "replies today · \(IslandFormat.dollars(today.cost))" : "replies today · \(IslandFormat.tokens(today.output)) written")
+                    stat(today.replies.formatted(), cost ? "replies today · \(IslandFormat.cost(today.cost, unpriced: today.unpriced))"
+                                                         : "replies today · \(IslandFormat.tokens(today.output)) written")
                     HStack(spacing: 5) {
                         if running > 0 { LiveDot() }
                         Text(running == 0 ? "Nothing running" : "\(running) session\(running == 1 ? "" : "s") working")
@@ -407,16 +428,17 @@ private struct AgentsTodayCard: View {
 
     var body: some View {
         let ledger = env.agents.ledger
-        let agents = shownAgents(env).filter(\.countsTokens)
-        let days = agents.map { ($0, ledger.today($0, now: now)) }
+        let days = shownAgents(env).map { ($0, ledger.today($0, now: now)) }
         let total = days.reduce(0) { $0 + $1.1.tokens }
         let totalCost = days.reduce(0) { $0 + $1.1.cost }
+        let unpriced = days.reduce(0) { $0 + $1.1.unpriced }
         let sessions = days.reduce(0) { $0 + $1.1.sessions.count }
-        let cost = env.settings.settings.agents.showCost
+        // The tokens when none of them had a price.
+        let cost = env.settings.settings.agents.showCost && (totalCost > 0 || unpriced == 0)
         VStack(alignment: .leading, spacing: 6) {
             if size == .small {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(cost ? IslandFormat.dollars(totalCost) : IslandFormat.tokens(total))
+                    Text(cost ? IslandFormat.cost(totalCost, unpriced: unpriced) : IslandFormat.tokens(total))
                         .font(.system(size: 22, weight: .semibold, design: .rounded)).monospacedDigit()
                     Text(cost ? "\(IslandFormat.tokens(total)) tokens" : "tokens · \(sessions) session\(sessions == 1 ? "" : "s")")
                         .font(.system(size: 10.5)).foregroundStyle(.secondary).lineLimit(1)
@@ -425,7 +447,7 @@ private struct AgentsTodayCard: View {
                 HStack(alignment: .top, spacing: 16) {
                     ForEach(days.filter { $0.1.tokens > 0 }.prefix(3), id: \.0) { a, day in
                         VStack(alignment: .leading, spacing: 0) {
-                            Text(cost && day.cost > 0 ? IslandFormat.dollars(day.cost) : IslandFormat.tokens(day.tokens))
+                            Text(cost && day.cost > 0 ? IslandFormat.cost(day.cost, unpriced: day.unpriced) : IslandFormat.tokens(day.tokens))
                                 .font(.system(size: 17, weight: .semibold, design: .rounded)).monospacedDigit()
                             HStack(spacing: 4) {
                                 RoundedRectangle(cornerRadius: 2).fill(a.color).frame(width: 8, height: 8)
@@ -438,12 +460,13 @@ private struct AgentsTodayCard: View {
                 }
             }
             Spacer(minLength: 0)
-            HourBars(days: days, hour: Calendar.current.component(.hour, from: now), height: size == .small ? 44 : 50)
+            HourBars(days: days, hour: Calendar.autoupdatingCurrent.component(.hour, from: now), height: size == .small ? 44 : 50)
             if size == .medium {
+                // "12 AM … 11 PM", or "00 … 23", as your clock shows them.
                 HStack {
-                    ForEach(["0:00", "6:00", "12:00", "18:00", "23:00"], id: \.self) { t in
-                        Text(t)
-                        if t != "23:00" { Spacer(minLength: 0) }
+                    ForEach([0, 6, 12, 18, 23], id: \.self) { h in
+                        Text(IslandFormat.hour(h))
+                        if h != 23 { Spacer(minLength: 0) }
                     }
                 }
                 .font(.system(size: 9)).foregroundStyle(.tertiary)

@@ -33,7 +33,7 @@ struct AgentsPane: View {
                     Toggle(isOn: $store.settings.agents.showCost) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Show what it costs")
-                            Text("At Anthropic's and OpenAI's API prices for each model, cache and fast mode included; OpenCode's own figures. With a subscription such as Claude Max you don't pay per token, so it's what the same work would cost through the API. Models running on this Mac are free.")
+                            Text("At Anthropic's, OpenAI's and Google's API prices for each model, cache and fast mode included; OpenCode's own figures when it has them. With a subscription such as Claude Max you don't pay per token, so it's what the same work would cost through the API. Models without a public price, such as ones running on this Mac, aren't counted: the cost then reads \"≥\", or \"—\" when none of the work had a price.")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
@@ -45,7 +45,7 @@ struct AgentsPane: View {
                 } header: {
                     Text("Agents")
                 } footer: {
-                    Text("Agents join when the files they keep are found. Gemini keeps its token counts in a format the island can't read, so it shows prompts and sessions. Claude Code doesn't keep its plan's percentage on the Mac, so its card shows the 5-hour window's timing and the tokens used.")
+                    Text("Agents join when the files they keep are found, also when they're installed later, including in folders your shell profile moves them to (CLAUDE_CONFIG_DIR, CODEX_HOME, GEMINI_CLI_HOME, XDG_CONFIG_HOME, XDG_DATA_HOME). Gemini's tokens come from Gemini CLI; Antigravity CLI keeps only when you sent a prompt, so it adds prompts. With a Claude plan, Claude Code's 5-hour window is an estimate from your replies: the plan's own percentage isn't reliably available on the Mac.")
                 }
                 Section {
                     Toggle(isOn: $store.settings.agents.showWorking) {
@@ -57,8 +57,8 @@ struct AgentsPane: View {
                     }
                     Toggle(isOn: $store.settings.agents.alertWhenDone) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Alert when one finishes")
-                            Text("Which agent, which project and how long it took, when it stops and waits for you. Click it to go back.")
+                            Text("Alert when one finishes or needs you")
+                            Text("Which agent, which project and how long it took, when it stops and waits for you; or what it asks, such as approving a command. Click it to go back.")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
@@ -73,7 +73,7 @@ struct AgentsPane: View {
                     HStack {
                         Button("Show a Sample Alert") {
                             env.engine.post(IslandAlert(kind: .agents, style: .agentFinished(
-                                AgentFinish(id: UUID().uuidString, session: "", agent: .claudeCode, project: "dynamic_island", duration: 400)), holdSeconds: 5))
+                                AgentFinish(id: UUID().uuidString, session: "", agent: .claudeCode, project: "my-app", duration: 400)), holdSeconds: 5))
                         }
                         Text("Shows one on the island itself.").font(.caption).foregroundStyle(.secondary)
                     }
@@ -158,7 +158,7 @@ private struct DashboardPlacement: View {
     }
 }
 
-/// An agent: whether it's on this Mac, when it was last used, and its switch.
+/// An agent: whether it's on this Mac, when it was last used, its folder, and its switch.
 private struct AgentRow: View {
     let agent: AgentKind
     @Environment(AppEnvironment.self) private var env
@@ -173,20 +173,30 @@ private struct AgentRow: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(agent.displayName)
                     Text(status(installed: installed)).font(.caption).foregroundStyle(.secondary)
+                    Text(folder(installed: installed)).font(.caption).foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
                 }
             }
         }
         .disabled(!installed)
     }
 
+    /// Where its files are read from: "~/.claude", or where your shell profile moved them.
+    private func folder(installed: Bool) -> String {
+        let folders = env.agents.folders.shown(agent) { FileManager.default.fileExists(atPath: $0) }
+        let list = folders.map { ($0 as NSString).abbreviatingWithTildeInPath }.formatted(.list(type: .and))
+        return installed ? list : "Looked for in \(list)"
+    }
+
     private func status(installed: Bool) -> String {
-        guard installed else { return "Not on this Mac (~/\(agent.folder))" }
+        guard installed else { return "Not on this Mac" }
         let week = env.agents.ledger.week(agent, now: .now)
-        let cost = env.settings.settings.agents.showCost && week.cost > 0 ? " · \(IslandFormat.dollars(week.cost)) this week" : ""
+        let cost = env.settings.settings.agents.showCost && week.cost > 0 ? " · \(IslandFormat.cost(week.cost, unpriced: week.unpriced)) this week" : ""
         let open = env.agents.sessions.filter { $0.agent == agent }
         if !open.isEmpty {
             let working = open.filter { $0.state == .working }.count
-            return (working > 0 ? "\(working) working now" : "\(open.count) open, waiting for you") + cost
+            let asking = open.filter { $0.state == .needsYou }.count
+            let now = asking > 0 ? "\(asking) need\(asking == 1 ? "s" : "") you" : working > 0 ? "\(working) working now" : "\(open.count) open, waiting for you"
+            return now + cost
         }
         if let last = env.agents.ledger.lastUsed[agent] {
             return "Last used \(last.formatted(.relative(presentation: .named)))\(cost)"
