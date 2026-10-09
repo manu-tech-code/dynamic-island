@@ -38,7 +38,9 @@ The Xcode project is generated from `project.yml` and isn't committed. Run
 `DynamicIsland.xcodeproj` if you want Xcode.
 
 Builds are signed with your Apple Development identity, so macOS keeps
-permissions (Calendars, Automation) between builds.
+permissions (Calendars, Automation) between builds. Release builds are for Apple
+silicon only, leave out the debugger entitlement (`get-task-allow`) and carry a
+secure timestamp.
 
 Branches, pull requests and releases: see [CONTRIBUTING.md](CONTRIBUTING.md).
 

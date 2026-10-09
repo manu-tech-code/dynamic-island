@@ -28,6 +28,14 @@ settings:
     CODE_SIGN_IDENTITY: "Apple Development"
     ENABLE_HARDENED_RUNTIME: YES
     DEAD_CODE_STRIPPING: YES
+  configs:
+    # What ships: Apple silicon only (install.sh and the README say so too); no
+    # get-task-allow, which Xcode adds for debuggers even to Release builds
+    # signed with a development certificate; and a secure timestamp on the signature.
+    Release:
+      ARCHS: arm64
+      CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+      OTHER_CODE_SIGN_FLAGS: --timestamp
 
 targets:
   DynamicIsland:
