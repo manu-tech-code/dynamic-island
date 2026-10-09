@@ -53,6 +53,8 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 /// previews, and it reopens on the pane you last viewed.
 struct SettingsView: View {
     @AppStorage("settings.lastPane") private var paneRaw = SettingsPane.layout.rawValue
+    /// Fits a 13-inch display at its largest text size (1024×640 points, less the menu bar).
+    static let minimumSize = CGSize(width: 720, height: 460)
 
     var body: some View {
         let selection = Binding<SettingsPane?>(
@@ -86,7 +88,7 @@ struct SettingsView: View {
             .formStyle(.grouped)
             .navigationTitle(pane.title)
         }
-        .frame(minWidth: 900, minHeight: 640)
+        .frame(minWidth: Self.minimumSize.width, minHeight: Self.minimumSize.height)
     }
 }
 
