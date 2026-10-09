@@ -36,6 +36,7 @@ actor AgentLogReader {
     private struct CodexFile {
         var id = ""
         var folder = ""
+        var model = ""
         var started = Date.distantPast
         var working = false
         /// When it last started or finished.
@@ -129,10 +130,13 @@ actor AgentLogReader {
             switch entry {
             case .session(let id, let folder, let started):
                 file.id = id; file.folder = folder; file.started = started; file.since = started
-            case .usage(let time, let tokens, let output, let limit):
-                if tokens > 0 {
+            case .model(let model):
+                file.model = model
+            case .usage(let time, let input, let cached, let output, let limit):
+                if input + output > 0 {
                     ledger.add(AgentReply(agent: .codex, id: "codex:\(file.id)@\(time.timeIntervalSince1970)", time: time,
-                                          tokens: tokens, output: output, session: file.id), now: now)
+                                          tokens: input + output, output: output, session: file.id,
+                                          cost: AgentPricing.openAI(model: file.model, input: input, cached: cached, output: output)), now: now)
                 }
                 if let limit { ledger.limits[.codex] = limit }
             case .started(let time):
@@ -181,9 +185,10 @@ actor AgentLogReader {
             let cache = t["cache"] as? [String: Any] ?? [:]
             func n(_ v: Any?) -> Int { v as? Int ?? 0 }
             let output = n(t["output"]) + n(t["reasoning"])
+            // OpenCode prices each reply itself.
             ledger.add(AgentReply(agent: .openCode, id: "opencode:\(id)", time: Date(timeIntervalSince1970: Double(created) / 1000),
                                   tokens: n(t["input"]) + output + n(cache["read"]) + n(cache["write"]), output: output,
-                                  session: Self.text(row, 1) ?? ""), now: now)
+                                  session: Self.text(row, 1) ?? "", cost: d["cost"] as? Double ?? 0), now: now)
         }
         // Sessions touched in the last half hour, and whether their last reply is still being written.
         let recent = Int64(now.addingTimeInterval(-30 * 60).timeIntervalSince1970 * 1000)

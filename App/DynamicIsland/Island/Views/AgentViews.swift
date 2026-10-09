@@ -184,7 +184,13 @@ struct AgentSessionRow: View {
                     }
                 }
                 Spacer(minLength: 4)
-                if !compact { Text(session.agent.displayName).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1) }
+                let cost = env.settings.settings.agents.showCost ? env.agents.ledger.cost(of: session).flatMap { $0 > 0 ? IslandFormat.dollars($0) : nil } : nil
+                if !compact {
+                    Text([session.agent.displayName, cost].compactMap { $0 }.joined(separator: " · "))
+                        .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                } else if !short, let cost {
+                    Text(cost).font(.system(size: 11, weight: .medium)).monospacedDigit().foregroundStyle(.secondary)
+                }
             }
             .padding(.horizontal, 6)
             .padding(.vertical, compact ? 3 : 5)
@@ -315,8 +321,13 @@ private struct AgentsOverviewCard: View {
         let ledger = env.agents.ledger
         let today = ledger.today(a, now: now)
         let medium = size == .medium
+        let cost = env.settings.settings.agents.showCost && today.cost > 0
         if today.replies > 0 {
             if !a.countsTokens { return "\(today.replies) prompt\(today.replies == 1 ? "" : "s") today" }
+            if cost {
+                // The tokens are on the Today card; here, what the day cost.
+                return "\(IslandFormat.dollars(today.cost)) today"
+            }
             return medium ? "\(today.replies.formatted()) replies · \(IslandFormat.tokens(today.tokens)) tokens" : "\(IslandFormat.tokens(today.tokens)) today"
         }
         let week = ledger.week(a, now: now)
@@ -358,10 +369,16 @@ private struct AgentWindowCard: View {
             let running = agents.sessions.filter { $0.agent == .claudeCode && $0.state == .working }.count
             HStack(spacing: 14) {
                 ring
+                let cost = env.settings.settings.agents.showCost
                 VStack(alignment: .leading, spacing: 5) {
-                    stat(window.map { IslandFormat.tokens($0.tokens) } ?? "0",
-                         window.map { "tokens this window · resets \($0.resets.formatted(date: .omitted, time: .shortened))" } ?? "tokens · no window open")
-                    stat(today.replies.formatted(), "replies today · \(IslandFormat.tokens(today.output)) written")
+                    if cost {
+                        stat(IslandFormat.dollars(window?.cost ?? 0),
+                             window.map { "this window · \(IslandFormat.tokens($0.tokens)) tokens" } ?? "no window open")
+                    } else {
+                        stat(window.map { IslandFormat.tokens($0.tokens) } ?? "0",
+                             window.map { "tokens this window · resets \($0.resets.formatted(date: .omitted, time: .shortened))" } ?? "tokens · no window open")
+                    }
+                    stat(today.replies.formatted(), cost ? "replies today · \(IslandFormat.dollars(today.cost))" : "replies today · \(IslandFormat.tokens(today.output)) written")
                     HStack(spacing: 5) {
                         if running > 0 { LiveDot() }
                         Text(running == 0 ? "Nothing running" : "\(running) session\(running == 1 ? "" : "s") working")
@@ -393,21 +410,27 @@ private struct AgentsTodayCard: View {
         let agents = shownAgents(env).filter(\.countsTokens)
         let days = agents.map { ($0, ledger.today($0, now: now)) }
         let total = days.reduce(0) { $0 + $1.1.tokens }
+        let totalCost = days.reduce(0) { $0 + $1.1.cost }
         let sessions = days.reduce(0) { $0 + $1.1.sessions.count }
+        let cost = env.settings.settings.agents.showCost
         VStack(alignment: .leading, spacing: 6) {
             if size == .small {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(IslandFormat.tokens(total)).font(.system(size: 22, weight: .semibold, design: .rounded)).monospacedDigit()
-                    Text("tokens · \(sessions) session\(sessions == 1 ? "" : "s")").font(.system(size: 10.5)).foregroundStyle(.secondary)
+                    Text(cost ? IslandFormat.dollars(totalCost) : IslandFormat.tokens(total))
+                        .font(.system(size: 22, weight: .semibold, design: .rounded)).monospacedDigit()
+                    Text(cost ? "\(IslandFormat.tokens(total)) tokens" : "tokens · \(sessions) session\(sessions == 1 ? "" : "s")")
+                        .font(.system(size: 10.5)).foregroundStyle(.secondary).lineLimit(1)
                 }
             } else {
                 HStack(alignment: .top, spacing: 16) {
                     ForEach(days.filter { $0.1.tokens > 0 }.prefix(3), id: \.0) { a, day in
                         VStack(alignment: .leading, spacing: 0) {
-                            Text(IslandFormat.tokens(day.tokens)).font(.system(size: 17, weight: .semibold, design: .rounded)).monospacedDigit()
+                            Text(cost && day.cost > 0 ? IslandFormat.dollars(day.cost) : IslandFormat.tokens(day.tokens))
+                                .font(.system(size: 17, weight: .semibold, design: .rounded)).monospacedDigit()
                             HStack(spacing: 4) {
                                 RoundedRectangle(cornerRadius: 2).fill(a.color).frame(width: 8, height: 8)
-                                Text(a.displayName).font(.system(size: 10.5)).foregroundStyle(.secondary).lineLimit(1)
+                                Text(cost && day.cost > 0 ? "\(a.displayName) · \(IslandFormat.tokens(day.tokens))" : a.displayName)
+                                    .font(.system(size: 10.5)).foregroundStyle(.secondary).lineLimit(1)
                             }
                         }
                     }

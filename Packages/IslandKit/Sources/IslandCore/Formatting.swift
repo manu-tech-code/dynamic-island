@@ -34,6 +34,15 @@ public enum IslandFormat {
         }
     }
 
+    /// Dollars, short: "$0.42", "$12.40", "$123", "$1.2K".
+    public static func dollars(_ v: Double) -> String {
+        switch max(0, v) {
+        case 1000...: String(format: "$%.1fK", v / 1000)
+        case 100...: String(format: "$%.0f", v)
+        default: String(format: "$%.2f", max(0, v))
+        }
+    }
+
     /// A clock that counts up, for an agent at work: "0:42", "4:12", then "1h 05".
     public static func elapsed(_ seconds: TimeInterval) -> String {
         let s = Int(max(0, seconds))

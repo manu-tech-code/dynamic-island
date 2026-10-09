@@ -96,6 +96,8 @@ public enum AgentCardStyle: String, Codable, CaseIterable, Sendable, Identifiabl
 
 public struct AgentSettings: Codable, Equatable, Sendable {
     public var card: AgentCardStyle = .agents
+    /// What the work would cost at the provider's API prices, beside the tokens.
+    public var showCost = true
     /// Which agents show, by kind. One not chosen yet shows (if it's on this Mac).
     public var agents: [String: Bool] = [:]
     /// While an agent works, the island shows it with a spinner and how long it's been going.
@@ -200,9 +202,12 @@ public struct AgentReply: Equatable, Sendable {
     /// What it wrote.
     public var output: Int
     public var session: String
+    /// What it would cost at the provider's API prices, in US dollars (see `AgentPricing`).
+    public var cost: Double
 
-    public init(agent: AgentKind, id: String?, time: Date, tokens: Int, output: Int, session: String) {
-        self.agent = agent; self.id = id; self.time = time; self.tokens = tokens; self.output = output; self.session = session
+    public init(agent: AgentKind, id: String?, time: Date, tokens: Int, output: Int, session: String, cost: Double = 0) {
+        self.agent = agent; self.id = id; self.time = time; self.tokens = tokens; self.output = output
+        self.session = session; self.cost = cost
     }
 }
 
@@ -224,6 +229,8 @@ public struct AgentDay: Equatable, Sendable {
     public var replies = 0
     public var output = 0
     public var sessions: Set<String> = []
+    /// In US dollars, at API prices.
+    public var cost = 0.0
 
     public init() {}
 
@@ -237,6 +244,7 @@ public struct AgentWindow: Equatable, Sendable {
 
     public var start: Date
     public var tokens: Int
+    public var cost = 0.0
 
     public var resets: Date { start.addingTimeInterval(Self.length) }
     public func left(now: Date) -> TimeInterval { max(0, resets.timeIntervalSince(now)) }
@@ -249,6 +257,13 @@ public struct AgentLedger: Equatable, Sendable {
     public struct Point: Equatable, Sendable {
         public var time: Date
         public var tokens: Int
+        public var cost: Double
+    }
+
+    /// A session's spend over the week.
+    struct Spend: Equatable, Sendable {
+        var cost = 0.0
+        var last = Date.distantPast
     }
 
     public static let keepDays = 8
@@ -259,6 +274,7 @@ public struct AgentLedger: Equatable, Sendable {
     public private(set) var lastUsed: [AgentKind: Date] = [:]
     public var limits: [AgentKind: AgentLimit] = [:]
     private var seen: [String: Date] = [:]
+    private var spend: [String: Spend] = [:]
     private let calendar: Calendar
 
     public init(calendar: Calendar = .current) { self.calendar = calendar }
@@ -277,10 +293,16 @@ public struct AgentLedger: Equatable, Sendable {
         d.hours[hour] += reply.tokens
         d.replies += 1
         d.output += reply.output
-        if !reply.session.isEmpty { d.sessions.insert(reply.session) }
+        d.cost += reply.cost
+        if !reply.session.isEmpty {
+            d.sessions.insert(reply.session)
+            let key = "\(reply.agent.rawValue):\(reply.session)"
+            spend[key, default: Spend()].cost += reply.cost
+            if reply.time > spend[key]!.last { spend[key]!.last = reply.time }
+        }
         days[reply.agent, default: [:]][day] = d
         if reply.time > now.addingTimeInterval(-86400) {
-            recent[reply.agent, default: []].append(Point(time: reply.time, tokens: reply.tokens))
+            recent[reply.agent, default: []].append(Point(time: reply.time, tokens: reply.tokens, cost: reply.cost))
         }
         if reply.time > lastUsed[reply.agent] ?? .distantPast { lastUsed[reply.agent] = reply.time }
         return true
@@ -291,6 +313,7 @@ public struct AgentLedger: Equatable, Sendable {
         let cutoff = calendar.startOfDay(for: now.addingTimeInterval(-Double(Self.keepDays) * 86400))
         for agent in days.keys { days[agent] = days[agent]?.filter { $0.key >= cutoff } }
         seen = seen.filter { $0.value >= cutoff }
+        spend = spend.filter { $0.value.last >= cutoff }
         let dayAgo = now.addingTimeInterval(-86400)
         for agent in recent.keys { recent[agent]?.removeAll { $0.time < dayAgo } }
     }
@@ -300,12 +323,15 @@ public struct AgentLedger: Equatable, Sendable {
     }
 
     /// The last seven days, today included.
-    public func week(_ agent: AgentKind, now: Date) -> (tokens: Int, replies: Int, sessions: Int) {
+    public func week(_ agent: AgentKind, now: Date) -> (tokens: Int, replies: Int, sessions: Int, cost: Double) {
         let from = calendar.startOfDay(for: now.addingTimeInterval(-6 * 86400))
         let list = (days[agent] ?? [:]).filter { $0.key >= from }.map(\.value)
         return (list.reduce(0) { $0 + $1.tokens }, list.reduce(0) { $0 + $1.replies },
-                list.reduce(into: Set<String>()) { $0.formUnion($1.sessions) }.count)
+                list.reduce(into: Set<String>()) { $0.formUnion($1.sessions) }.count, list.reduce(0) { $0 + $1.cost })
     }
+
+    /// What a session has cost over the week, if it replied in it.
+    public func cost(of session: AgentSession) -> Double? { spend[session.id]?.cost }
 
     /// The window open now, if one is.
     public func window(_ agent: AgentKind = .claudeCode, now: Date) -> AgentWindow? {
@@ -316,6 +342,7 @@ public struct AgentLedger: Equatable, Sendable {
                 current = AgentWindow(start: hour, tokens: 0)
             }
             current!.tokens += p.tokens
+            current!.cost += p.cost
         }
         guard let current, now < current.resets else { return nil }
         return current
@@ -339,9 +366,18 @@ public enum ClaudeCodeLog {
               let time = (d["timestamp"] as? String).flatMap(Self.date) else { return nil }
         func n(_ key: String) -> Int { (usage[key] as? Int) ?? 0 }
         let output = n("output_tokens")
-        let tokens = n("input_tokens") + n("cache_creation_input_tokens") + n("cache_read_input_tokens") + output
+        let written = n("cache_creation_input_tokens")
+        let tokens = n("input_tokens") + written + n("cache_read_input_tokens") + output
+        // Cache writes last 5 minutes or an hour, at different prices; older logs don't say which.
+        let split = usage["cache_creation"] as? [String: Any]
+        let hour = (split?["ephemeral_1h_input_tokens"] as? Int) ?? 0
+        let searches = ((usage["server_tool_use"] as? [String: Any])?["web_search_requests"] as? Int) ?? 0
+        let cost = AgentPricing.claude(model: message["model"] as? String ?? "",
+                                       input: n("input_tokens"), cacheWrite5m: max(0, written - hour), cacheWrite1h: hour,
+                                       cacheRead: n("cache_read_input_tokens"), output: output, webSearches: searches,
+                                       fast: usage["speed"] as? String == "fast", usOnly: usage["inference_geo"] as? String == "us")
         return AgentReply(agent: .claudeCode, id: message["id"] as? String, time: time, tokens: tokens, output: output,
-                          session: d["sessionId"] as? String ?? "")
+                          session: d["sessionId"] as? String ?? "", cost: cost)
     }
 
     private static let fractional = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
@@ -357,8 +393,10 @@ public enum ClaudeCodeLog {
 public enum CodexLog {
     public enum Entry: Equatable, Sendable {
         case session(id: String, folder: String, started: Date)
-        /// A reply's tokens, and the plan limit when its server sent one.
-        case usage(time: Date, tokens: Int, output: Int, limit: AgentLimit?)
+        /// The model its turns use from here on.
+        case model(String)
+        /// A reply's tokens (input includes the cached part), and the plan limit when its server sent one.
+        case usage(time: Date, input: Int, cached: Int, output: Int, limit: AgentLimit?)
         /// It started working on what you asked.
         case started(Date)
         /// It finished, and waits for you.
@@ -384,12 +422,89 @@ public enum CodexLog {
                 return AgentLimit(usedPercent: used, windowMinutes: l["window_minutes"] as? Int, resetsAt: resets)
             }
             guard last != nil || parsedLimit != nil else { return nil }
-            return .usage(time: time, tokens: last?["total_tokens"] as? Int ?? 0,
-                          output: (last?["output_tokens"] as? Int ?? 0) + (last?["reasoning_output_tokens"] as? Int ?? 0), limit: parsedLimit)
+            // Reasoning is part of the output, as total_tokens = input + output shows.
+            return .usage(time: time, input: last?["input_tokens"] as? Int ?? 0, cached: last?["cached_input_tokens"] as? Int ?? 0,
+                          output: last?["output_tokens"] as? Int ?? 0, limit: parsedLimit)
+        case ("turn_context", _):
+            return (payload["model"] as? String).map { .model($0) }
         case ("event_msg", "task_started"): return .started(time)
         case ("event_msg", "task_complete"): return .finished(time)
         default: return nil
         }
+    }
+}
+
+/// What a reply would cost at the provider's API prices, in US dollars per
+/// million tokens. Subscriptions (Claude Max, ChatGPT Pro) don't charge per
+/// token, so for them it's what the same work would cost through the API.
+/// Models not listed, such as ones running on this Mac, count as free.
+public enum AgentPricing {
+    public struct Price: Equatable, Sendable {
+        public var input: Double
+        public var output: Double
+        public var cacheWrite5m: Double
+        public var cacheWrite1h: Double
+        public var cacheRead: Double
+
+        public init(_ input: Double, _ output: Double, write5m: Double? = nil, write1h: Double? = nil, read: Double) {
+            self.input = input; self.output = output
+            self.cacheWrite5m = write5m ?? input * 1.25
+            self.cacheWrite1h = write1h ?? input * 2
+            self.cacheRead = read
+        }
+    }
+
+    /// platform.claude.com/docs/en/about-claude/pricing, October 2026. Longest name first.
+    static let claudePrices: [(String, Price)] = [
+        ("claude-fable-5-1", Price(10, 50, read: 0.25)), ("claude-mythos-5-1", Price(10, 50, read: 0.25)),
+        ("claude-fable-5", Price(10, 50, read: 1)), ("claude-mythos-5", Price(10, 50, read: 1)),
+        ("claude-opus-5-5", Price(4, 20, read: 0.20)), ("claude-opus-5", Price(5, 25, read: 0.50)),
+        ("claude-opus-4-8", Price(5, 25, read: 0.50)), ("claude-opus-4-7", Price(5, 25, read: 0.50)),
+        ("claude-opus-4-6", Price(5, 25, read: 0.50)), ("claude-opus-4-5", Price(5, 25, read: 0.50)),
+        ("claude-opus-4-1", Price(15, 75, read: 1.50)), ("claude-opus-4", Price(15, 75, read: 1.50)),
+        ("claude-sonnet-5-5", Price(2, 10, read: 0.10)), ("claude-sonnet-5", Price(2, 10, read: 0.20)),
+        ("claude-sonnet-4", Price(3, 15, read: 0.30)), ("claude-3-7-sonnet", Price(3, 15, read: 0.30)),
+        ("claude-haiku-5-5", Price(0.10, 0.50, read: 0.01)), ("claude-haiku-4-5", Price(1, 5, read: 0.10)),
+        ("claude-3-5-haiku", Price(0.80, 4, read: 0.08)),
+    ].sorted { $0.0.count > $1.0.count }
+
+    /// Haiku 5.5 over 100,000 tokens of prompt.
+    static let haikuLong = Price(0.50, 2.50, read: 0.05)
+
+    /// developers.openai.com/api/docs/pricing, October 2026 (short context). Longest name first.
+    static let openAIPrices: [(String, Price)] = [
+        ("gpt-6.1-sol", Price(2, 10, read: 0.10)), ("gpt-6-astra", Price(10, 50, read: 1)), ("gpt-6-sol", Price(2, 10, read: 0.20)),
+        ("gpt-6-luna", Price(0.10, 0.50, read: 0.01)), ("gpt-5.6-sol", Price(4, 20, read: 0.40)), ("gpt-5.6-terra", Price(2, 12, read: 0.20)),
+        ("gpt-5.6-luna", Price(0.20, 1.20, read: 0.02)), ("gpt-5.5-pro", Price(30, 180, read: 30)), ("gpt-5.5", Price(5, 30, read: 0.50)),
+        ("gpt-5.4-pro", Price(30, 180, read: 30)), ("gpt-5.4-mini", Price(0.75, 4.50, read: 0.075)), ("gpt-5.4-nano", Price(0.20, 1.25, read: 0.02)),
+        ("gpt-5.4", Price(2.50, 15, read: 0.25)), ("gpt-5.3-codex", Price(1.75, 14, read: 0.175)), ("gpt-5.2-pro", Price(21, 168, read: 21)),
+        ("gpt-5.2", Price(1.75, 14, read: 0.175)), ("gpt-5.1", Price(1.25, 10, read: 0.125)), ("gpt-5-mini", Price(0.25, 2, read: 0.025)),
+        ("gpt-5-nano", Price(0.05, 0.40, read: 0.005)), ("gpt-5-pro", Price(15, 120, read: 15)), ("gpt-5", Price(1.25, 10, read: 0.125)),
+    ].sorted { $0.0.count > $1.0.count }
+
+    static func price(_ model: String, in table: [(String, Price)]) -> Price? {
+        let m = model.lowercased()
+        return table.first { m.hasPrefix($0.0) }?.1
+    }
+
+    /// A Claude reply. Fast mode doubles Opus's prices; US-only inference adds 10%;
+    /// a web search is a cent.
+    public static func claude(model: String, input: Int, cacheWrite5m: Int, cacheWrite1h: Int, cacheRead: Int, output: Int,
+                              webSearches: Int = 0, fast: Bool = false, usOnly: Bool = false) -> Double {
+        guard var p = price(model, in: claudePrices) else { return 0 }
+        if model.hasPrefix("claude-haiku-5-5"), input + cacheWrite5m + cacheWrite1h + cacheRead > 100_000 { p = haikuLong }
+        var cost = (Double(input) * p.input + Double(cacheWrite5m) * p.cacheWrite5m + Double(cacheWrite1h) * p.cacheWrite1h
+            + Double(cacheRead) * p.cacheRead + Double(output) * p.output) / 1_000_000
+        if fast, model.hasPrefix("claude-opus") { cost *= 2 }
+        if usOnly { cost *= 1.1 }
+        return cost + Double(webSearches) * 0.01
+    }
+
+    /// An OpenAI reply (Codex): `input` includes the `cached` part.
+    public static func openAI(model: String, input: Int, cached: Int, output: Int) -> Double {
+        guard let p = price(model, in: openAIPrices) else { return 0 }
+        let cachedPart = min(cached, input)
+        return (Double(input - cachedPart) * p.input + Double(cachedPart) * p.cacheRead + Double(output) * p.output) / 1_000_000
     }
 }
 

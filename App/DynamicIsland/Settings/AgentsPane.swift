@@ -30,6 +30,17 @@ struct AgentsPane: View {
                     Text(s.agents.card.summary)
                 }
                 Section {
+                    Toggle(isOn: $store.settings.agents.showCost) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Show what it costs")
+                            Text("At Anthropic's and OpenAI's API prices for each model, cache and fast mode included; OpenCode's own figures. With a subscription such as Claude Max you don't pay per token, so it's what the same work would cost through the API. Models running on this Mac are free.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                } header: {
+                    Text("Cost")
+                }
+                Section {
                     ForEach(AgentKind.allCases) { AgentRow(agent: $0) }
                 } header: {
                     Text("Agents")
@@ -170,13 +181,15 @@ private struct AgentRow: View {
 
     private func status(installed: Bool) -> String {
         guard installed else { return "Not on this Mac (~/\(agent.folder))" }
+        let week = env.agents.ledger.week(agent, now: .now)
+        let cost = env.settings.settings.agents.showCost && week.cost > 0 ? " · \(IslandFormat.dollars(week.cost)) this week" : ""
         let open = env.agents.sessions.filter { $0.agent == agent }
         if !open.isEmpty {
             let working = open.filter { $0.state == .working }.count
-            return working > 0 ? "\(working) working now" : "\(open.count) open, waiting for you"
+            return (working > 0 ? "\(working) working now" : "\(open.count) open, waiting for you") + cost
         }
         if let last = env.agents.ledger.lastUsed[agent] {
-            return "Last used \(last.formatted(.relative(presentation: .named)))"
+            return "Last used \(last.formatted(.relative(presentation: .named)))\(cost)"
         }
         return env.agents.loaded ? "On this Mac, not used this week" : "On this Mac"
     }
