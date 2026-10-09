@@ -9,7 +9,7 @@ enum NowPlayingPage: Equatable { case player, lyrics, upNext }
 /// click does. The engine decides what's live; this adds what the user opened.
 @Observable
 final class IslandViewModel {
-    enum UserState: Equatable { case none, expanded(String), dashboard, shelf }
+    enum UserState: Equatable { case none, expanded(String), dashboard, shelf, recentMessages }
 
     let env: AppEnvironment
     var notch: NotchRect
@@ -56,6 +56,7 @@ final class IslandViewModel {
         case .expanded(let id) where engine.activity(id: id) != nil: return .expanded(activityID: id)
         case .dashboard: return .dashboard
         case .shelf: return .shelf
+        case .recentMessages: return .recentMessages
         default: return ranked.isEmpty ? .idle : .compact
         }
     }
@@ -71,11 +72,16 @@ final class IslandViewModel {
     /// in with its edge, under the camera. Coming out runs the same motion back.
     var isTucked: Bool {
         if let previewTuck { return previewTuck && presentation == .compact }
-        return hidesUntilHover && !revealed && !announcing && !hasUnreadBadges && presentation == .compact
+        return hidesUntilHover && !revealed && !announcing && !hasUnreadBadges && !hasWorkingAgents && presentation == .compact
     }
 
     /// Unread messages wait on the island (the badges style), even when it hides until hover.
     var hasUnreadBadges: Bool { !env.messages.activities.isEmpty && settings[module: .messages].showInCompact }
+
+    /// So do agents at work (Settings › AI Agents › Show agents while they work).
+    var hasWorkingAgents: Bool {
+        settings[module: .agents].enabled && settings[module: .agents].showInCompact && !env.agents.activities.isEmpty
+    }
 
     /// The Settings preview of the reveal: tucked or out, played by the preview itself.
     private(set) var previewTuck: Bool?
@@ -170,7 +176,7 @@ final class IslandViewModel {
 
     /// Lyrics and Up Next scroll, so scrolling there mustn't close the island.
     var hasScrollableContent: Bool {
-        if presentation == .shelf || expandedActivity?.kind == .shelf { return true }
+        if presentation == .shelf || presentation == .recentMessages || expandedActivity?.kind == .shelf { return true }
         return expandedActivity?.kind == .nowPlaying && nowPlayingPage != .player
     }
 
@@ -182,6 +188,7 @@ final class IslandViewModel {
         case .expanded(let id): "expanded-\(id)-\(nowPlayingPage)"
         case .dashboard: "dashboard"
         case .shelf: "shelf"
+        case .recentMessages: "recentMessages"
         case .alert(let a): "alert-\(a.id)"
         }
     }
@@ -319,6 +326,7 @@ final class IslandViewModel {
             case .download(let d): "Downloading \(d.name)\(d.fraction.map { ", \(Int($0 * 100)) percent" } ?? "")"
             case .privacy(let p): p.microphone && p.camera ? "Microphone and camera in use" : p.microphone ? "Microphone in use" : "Camera in use"
             case .messages(let apps): apps.map { "\($0.count) unread in \($0.app)" }.joined(separator: ", ")
+            case .agents(let sessions): sessions.map { "\($0.agent.displayName) working in \($0.project)" }.joined(separator: ", ")
             }
         }
         if !fit.ranked.overflow.isEmpty { parts.append("and \(fit.ranked.overflow.count) more") }
@@ -348,6 +356,7 @@ final class IslandViewModel {
         switch presentation {
         case .dashboard: return DashboardLayout.width
         case .shelf: return IslandMetrics.shelf.width
+        case .recentMessages: return IslandMetrics.recentMessages.width
         case .expanded:
             guard let kind = expandedActivity?.kind else { return nil }
             return kind == .nowPlaying && nowPlayingPage != .player ? IslandMetrics.nowPlayingDetail.width : IslandMetrics.expandedSize(for: kind).width
@@ -457,10 +466,13 @@ final class IslandViewModel {
         case .idle: openDashboard()
         case .compact:
             if let primary = ranked.primary { open(primary.id) } else { openDashboard() }
-        case .expanded, .dashboard, .shelf: collapse()
-        case .alert:
-            // A message opens its conversation.
+        case .expanded, .dashboard, .shelf, .recentMessages: collapse()
+        case .alert(let alert):
+            // A message opens its conversation; a finished agent, its app or terminal.
             if let m = messageAlert?.messages.first { env.messages.open(m) }
+            if case .agentFinished(let f) = alert.style, let s = env.agents.sessions.first(where: { $0.id == f.session }) {
+                env.agents.bringForward(s)
+            }
             env.engine.dismissAlert()
         }
     }
@@ -497,6 +509,13 @@ final class IslandViewModel {
         shelfOpenedByDrag = false
         dropTargeted = false
         if userState != .shelf { openShelf() }
+    }
+
+    /// The messages that reached the island lately (the dashboard's messages button).
+    func openRecentMessages() {
+        guard userState != .recentMessages else { return }
+        env.look.refresh()
+        animate(open: true) { userState = .recentMessages }
     }
 
     func toggleDashboard() {

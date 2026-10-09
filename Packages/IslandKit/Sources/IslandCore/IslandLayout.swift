@@ -41,11 +41,13 @@ public enum IslandPresentation: Equatable, Sendable {
     case expanded(activityID: String)
     case dashboard
     case shelf
+    /// The messages that reached the island lately (from the dashboard's top bar).
+    case recentMessages
     case alert(IslandAlert)
 
     public var isOpen: Bool {
         switch self {
-        case .expanded, .dashboard, .shelf: true
+        case .expanded, .dashboard, .shelf, .recentMessages: true
         default: false
         }
     }
@@ -89,8 +91,13 @@ public enum IslandMetrics {
         case .download: (glyph, 38)                                    // ring | "100%"
         case .privacy(let p): (p.microphone && p.camera ? 36 : glyph, 18)
         case .messages(let apps): (iconRowWidth(count: min(2, apps.count)), 26)  // app icons | unread count
+        case .agents(let sessions):                                    // badges, spinner | "4:12"
+            (iconRowWidth(count: min(2, Set(sessions.map(\.agent)).count)) + glyphSpacing + agentSpinner, 44)
         }
     }
+
+    /// The working agents' spinner, beside their badges.
+    public static let agentSpinner: CGFloat = 14
 
     public static func iconRowWidth(count: Int) -> CGFloat {
         guard count > 0 else { return 0 }
@@ -251,11 +258,14 @@ public enum IslandMetrics {
         case .devices: CGSize(width: 460, height: 150)
         case .hud: CGSize(width: 420, height: 100)
         case .messages: CGSize(width: 440, height: 150)
+        case .agents: CGSize(width: 460, height: 176)
         }
     }
 
     /// The shelf, opened by a drag or a click; also the drop target.
     public static let shelf = CGSize(width: 600, height: 216)
+    /// Recent messages: the ears, then four rows (more scroll).
+    public static let recentMessages = CGSize(width: 560, height: 250)
 
     /// Content width of a compact alert's fuller ear: the icon on the left; a
     /// ring (devices) or the percentage and a ring (power) on the right.
@@ -426,6 +436,7 @@ public enum IslandMetrics {
             return expandedSize(for: kind, widthScale: c.widthScale)
         case .dashboard: return dashboardSize(c)
         case .shelf: return scaled(shelf, c.widthScale)
+        case .recentMessages: return scaled(recentMessages, c.widthScale)
         case .alert(let alert): return alertSize(for: alert.style, notch: c.notch, compactStyle: c.style)
         }
     }
@@ -445,6 +456,7 @@ public enum IslandMetrics {
             return expandedSize(for: a.kind)
         case .dashboard: return DashboardLayout.size(rows: dashboardRows, notchHeight: notch.height)
         case .shelf: return shelf
+        case .recentMessages: return recentMessages
         case .alert(let alert): return alertSize(for: alert.style, notch: notch, compactStyle: style)
         }
     }

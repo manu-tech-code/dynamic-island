@@ -11,7 +11,7 @@ public enum WidgetSize: String, Codable, CaseIterable, Sendable, Identifiable {
 /// Everything that can sit on the dashboard.
 public enum DashboardWidgetKind: String, Codable, CaseIterable, Sendable, Identifiable {
     case nowPlaying, calendar, timer, battery, cpu, memory, storage, network
-    case weather, shelf, clipboard, shortcuts, devices
+    case weather, shelf, clipboard, shortcuts, devices, messages, agents
 
     public var id: String { rawValue }
 
@@ -30,6 +30,8 @@ public enum DashboardWidgetKind: String, Codable, CaseIterable, Sendable, Identi
         case .clipboard: "Clipboard"
         case .shortcuts: "Shortcuts"
         case .devices: "Devices"
+        case .messages: "Messages"
+        case .agents: "AI Agents"
         }
     }
 
@@ -48,6 +50,8 @@ public enum DashboardWidgetKind: String, Codable, CaseIterable, Sendable, Identi
         case .clipboard: "doc.on.clipboard"
         case .shortcuts: "square.stack.3d.forward.dottedline"
         case .devices: "airpodspro"
+        case .messages: "message.fill"
+        case .agents: "sparkles"
         }
     }
 
@@ -66,12 +70,14 @@ public enum DashboardWidgetKind: String, Codable, CaseIterable, Sendable, Identi
         case .clipboard: "Recent copies, click to copy again"
         case .shortcuts: "Run your Shortcuts in one click"
         case .devices: "Connected AirPods and Bluetooth batteries"
+        case .messages: "Recent messages; click one to open it"
+        case .agents: "Claude Code, Codex and others: usage and what's running"
         }
     }
 
     public var allowedSizes: [WidgetSize] {
         switch self {
-        case .nowPlaying, .calendar, .cpu, .network, .weather, .shelf, .clipboard, .shortcuts, .devices: [.small, .medium]
+        case .nowPlaying, .calendar, .cpu, .network, .weather, .shelf, .clipboard, .shortcuts, .devices, .messages, .agents: [.small, .medium]
         case .timer, .battery, .memory, .storage: [.small]
         }
     }
@@ -85,6 +91,8 @@ public enum DashboardWidgetKind: String, Codable, CaseIterable, Sendable, Identi
         case .battery: .battery
         case .shelf: .shelf
         case .devices: .devices
+        case .messages: .messages
+        case .agents: .agents
         case .cpu, .memory, .storage, .network, .weather, .clipboard, .shortcuts: nil
         }
     }

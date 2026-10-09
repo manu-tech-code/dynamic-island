@@ -6,12 +6,15 @@ import Observation
 /// Messages from any app on the island (Settings › Messages): reads macOS's
 /// notification banners as they appear (`NotificationBannerReader`) and shows
 /// them in the chosen style. In the badges style, each app's unread count
-/// stays on the island until that app is opened. Nothing is kept beyond that.
+/// stays on the island until that app is opened, and the recent ones stay in a
+/// list on the island until the app quits. Nothing is saved.
 @Observable
 final class MessageAlertsService: ActivityProvider {
     let kind: ActivityKind = .messages
     /// Unread messages per app, newest app first (the badges style).
     private(set) var unread: [UnreadApp] = []
+    /// The messages that reached the island lately, newest first (the dashboard's list).
+    private(set) var recent = RecentMessages()
     /// Accessibility, which reading the banners needs.
     private(set) var trusted = AXIsProcessTrusted()
 
@@ -46,6 +49,12 @@ final class MessageAlertsService: ActivityProvider {
 
     func start() {
         whenChanged({ [settings] in settings.settings[module: .messages].enabled }) { [weak self] on in self?.update(on) }
+        // The list's length follows Settings; turned off, it's emptied.
+        whenChanged({ [settings] in "\(settings.settings.messages.keepRecent) \(settings.settings.messages.recentLimit)" }) { [weak self] _ in
+            guard let self else { return }
+            let s = self.settings.settings.messages
+            if s.keepRecent { self.recent.setLimit(s.recentLimit) } else { self.recent.removeAll() }
+        }
         // Hiding turned on or off, or an app switched: macOS's banner window follows.
         whenChanged({ [settings] in "\(settings.settings.messages.hideSystemBanner) \(settings.settings.messages.apps.sorted { $0.key < $1.key })" }) { [weak self] _ in
             self?.reader.refresh()
@@ -59,7 +68,7 @@ final class MessageAlertsService: ActivityProvider {
     private func update(_ enabled: Bool) {
         trusted = AXIsProcessTrusted()
         if enabled, trusted { reader.start() } else { reader.stop() }
-        if !enabled { unread = [] }
+        if !enabled { unread = []; recent.removeAll() }
         if enabled, !trusted { waitForTrust() }
     }
 
@@ -113,6 +122,10 @@ final class MessageAlertsService: ActivityProvider {
         // The ticker stays until the message has scrolled by.
         let hold = style == .ticker ? max(s.messages.holdSeconds, 3 + Double(message.text.count) * 0.09) : s.messages.holdSeconds
         if style == .badges { count(message) }
+        if s.messages.keepRecent {
+            recent.setLimit(s.messages.recentLimit)
+            recent.add(message)
+        }
         #if DEBUG
         lastMessage = message
         #endif
@@ -140,6 +153,7 @@ final class MessageAlertsService: ActivityProvider {
     /// Notification Center. Only if neither is there, the app.
     func open(_ message: MessageInfo) {
         clear(name: message.app, bundleID: message.bundleID)
+        recent.markRead(id: message.id)
         Task {
             if await reader.open(id: message.id) {
                 Log.info("messages: opened the conversation")
@@ -160,11 +174,39 @@ final class MessageAlertsService: ActivityProvider {
 
     func clearAll() { unread = [] }
 
+    // MARK: recent messages
+
+    func markAllRecentRead() { recent.markAllRead() }
+    func removeRecent(_ id: String) { recent.remove(id: id) }
+    func clearRecent() { recent.removeAll() }
+
     #if DEBUG
     @ObservationIgnored var lastMessage: MessageInfo?
+
+    /// Sample messages for renders: five, over the last day, the older ones read.
+    func debugFillRecent() {
+        let now = Date.now
+        let samples = [
+            MessageInfo(id: "debug-5", app: "Mail", bundleID: "com.apple.mail", sender: "GitHub", context: "Release v0.11.1",
+                        text: "manu-tech-code published a release", date: now.addingTimeInterval(-26 * 3600)),
+            MessageInfo(id: "debug-4", app: "Messages", bundleID: "com.apple.MobileSMS", sender: "Mum", text: "Call me when you're free ❤️",
+                        date: now.addingTimeInterval(-3 * 3600)),
+            MessageInfo(id: "debug-3", app: "Slack", bundleID: "com.tinyspeck.slackmacgap", sender: "Kofi", context: "#design",
+                        text: "Pushed the new icons, can you take a look before standup? The tray one is still a bit heavy.", date: now.addingTimeInterval(-42 * 60)),
+            MessageInfo(id: "debug-2", app: "WhatsApp", bundleID: "net.whatsapp.WhatsApp", sender: "Ama Mensah", text: "Are we still on for 6? I'll bring the charger 🔌",
+                        date: now.addingTimeInterval(-6 * 60)),
+            MessageInfo(id: "debug-1", app: "Microsoft Teams", bundleID: "com.microsoft.teams2", sender: "Sarah Owusu", context: "Daily sync",
+                        text: "Running 5 minutes late", date: now.addingTimeInterval(-20)),
+        ]
+        recent.setLimit(settings.settings.messages.recentLimit)
+        for m in samples { recent.add(m) }
+        recent.markRead(id: "debug-5")
+        recent.markRead(id: "debug-4")
+    }
     #endif
 
     private func clear(name: String?, bundleID: String?) {
+        if recent.entries.contains(where: { !$0.read }) { recent.markRead(app: name, bundleID: bundleID) }
         guard !unread.isEmpty else { return }
         unread.removeAll { u in (bundleID != nil && u.bundleID == bundleID) || u.app == name }
     }

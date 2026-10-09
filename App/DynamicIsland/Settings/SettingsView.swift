@@ -2,7 +2,7 @@ import IslandCore
 import SwiftUI
 
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, layout, dashboard, notifications, appearance, modules, permissions, about
+    case general, layout, dashboard, notifications, agents, appearance, modules, permissions, about
     var id: String { rawValue }
 
     var title: String {
@@ -11,6 +11,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .layout: "Layout"
         case .dashboard: "Dashboard"
         case .notifications: "Notifications"
+        case .agents: "AI Agents"
         case .appearance: "Appearance"
         case .modules: "Modules"
         case .permissions: "Permissions"
@@ -24,6 +25,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .layout: "capsule.fill"
         case .dashboard: "square.grid.2x2.fill"
         case .notifications: "bell.badge.fill"
+        case .agents: "sparkles"
         case .appearance: "circle.lefthalf.filled"
         case .modules: "square.stack.3d.up.fill"
         case .permissions: "hand.raised.fill"
@@ -37,6 +39,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .layout: .blue
         case .dashboard: .teal
         case .notifications: .red
+        case .agents: .orange
         case .appearance: .indigo
         case .modules: .orange
         case .permissions: .green
@@ -72,6 +75,7 @@ struct SettingsView: View {
                 case .layout: LayoutPane()
                 case .dashboard: DashboardPane()
                 case .notifications: NotificationsPane()
+                case .agents: AgentsPane()
                 case .appearance: AppearancePane()
                 case .modules: ModulesPane()
                 case .permissions: PermissionsPane()
@@ -476,6 +480,8 @@ extension DashboardWidgetKind {
         case .clipboard: .brown
         case .shortcuts: .pink
         case .devices: .indigo
+        case .messages: .green
+        case .agents: .orange
         }
     }
 }
@@ -567,6 +573,7 @@ private struct ModulesPane: View {
         case .devices: "AirPods and Bluetooth devices connecting, with their batteries"
         case .hud: "A volume and brightness HUD on the island instead of the system one"
         case .messages: "New messages from WhatsApp, Slack, Mail, Messages, Teams or any app, on the island"
+        case .agents: "Claude Code, Codex, OpenCode and Gemini at work, their usage, and an alert when they finish"
         }
     }
 
@@ -657,6 +664,12 @@ private struct ModulesPane: View {
                 Text("Styles, apps and a live preview are in Notifications.").foregroundStyle(.secondary)
                 Spacer()
                 Button("Open Notifications") { UserDefaults.standard.set(SettingsPane.notifications.rawValue, forKey: "settings.lastPane") }
+            }
+        case .agents:
+            HStack {
+                Text("Agents, the dashboard card and a live preview are in AI Agents.").foregroundStyle(.secondary)
+                Spacer()
+                Button("Open AI Agents") { UserDefaults.standard.set(SettingsPane.agents.rawValue, forKey: "settings.lastPane") }
             }
         case .backgroundApps:
             Stepper(value: $store.settings.backgroundApps.maxIcons, in: 1...24) {

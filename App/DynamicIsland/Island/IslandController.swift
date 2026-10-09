@@ -292,6 +292,17 @@ final class IslandController: NSObject {
         }
     }
 
+    /// From a link, Settings or the menu: the recent messages, kept open like
+    /// the dashboard from the keyboard until the pointer has had time to come over.
+    func showRecentMessages() {
+        guard !env.lock.isLocked else { return }
+        model.openRecentMessages()
+        if hiddenForFullScreen { panel.orderFrontRegardless() }
+        panel.allowsKey = true
+        panel.makeKey()
+        if !inside { scheduleCollapse(after: 8) }
+    }
+
     // MARK: full screen
 
     private(set) var hiddenForFullScreen = false
@@ -392,6 +403,10 @@ final class IslandController: NSObject {
         if model.settings[module: .shelf].enabled {
             add(menu, env.shelf.items.isEmpty ? "Open Shelf" : "Open Shelf (\(env.shelf.items.count))", #selector(menuShelf))
         }
+        if model.settings[module: .messages].enabled, model.settings.messages.keepRecent {
+            let unread = env.messages.recent.unreadCount
+            add(menu, unread > 0 ? "Recent Messages (\(unread) new)" : "Recent Messages", #selector(menuRecentMessages))
+        }
         menu.addItem(.separator())
 
         let width = NSMenuItem(title: "Width", action: nil, keyEquivalent: "")
@@ -448,6 +463,7 @@ final class IslandController: NSObject {
     @objc private func menuToggle() { model.isOpen ? model.collapse() : model.openDashboard() }
     @objc private func menuPlayPause() { env.nowPlaying.togglePlayPause() }
     @objc private func menuShelf() { model.openShelf() }
+    @objc private func menuRecentMessages() { showRecentMessages() }
     @objc private func menuUpdates() { env.updates.checkForUpdates() }
     @objc private func menuWidth(_ item: NSMenuItem) {
         guard let scale = item.representedObject as? Double else { return }
