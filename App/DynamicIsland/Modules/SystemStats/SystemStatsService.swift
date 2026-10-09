@@ -36,7 +36,7 @@ final class SystemStatsService {
     @ObservationIgnored private var demand = 0
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var lastTicks: (busy: UInt64, total: UInt64)?
-    @ObservationIgnored private var lastNet: (inBytes: UInt64, outBytes: UInt64, at: Date)?
+    @ObservationIgnored private var lastNet: (interfaces: [String: InterfaceBytes], at: Date)?
     @ObservationIgnored private var lastDiskRead = Date.distantPast
 
     init(settings: SettingsStore) {
@@ -90,12 +90,13 @@ final class SystemStatsService {
             let now = Date()
             if let last = lastNet {
                 let dt = max(0.1, now.timeIntervalSince(last.at))
-                netIn = Double(n.inBytes &- last.inBytes) / dt
-                netOut = Double(n.outBytes &- last.outBytes) / dt
+                let moved = NetworkMath.moved(from: last.interfaces, to: n)
+                netIn = Double(moved.received) / dt
+                netOut = Double(moved.sent) / dt
                 push(&netInHistory, netIn)
                 push(&netOutHistory, netOut)
             }
-            lastNet = (n.inBytes, n.outBytes, now)
+            lastNet = (n, now)
         }
         if Date().timeIntervalSince(lastDiskRead) > 30 {
             lastDiskRead = Date()
@@ -159,25 +160,33 @@ final class SystemStatsService {
         return (used, pressure)
     }
 
-    /// Bytes in/out summed over physical interfaces (en*). 32-bit counters, so
-    /// deltas use wrapping subtraction.
-    private static func networkBytes() -> (inBytes: UInt64, outBytes: UInt64)? {
-        var addrs: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&addrs) == 0, let first = addrs else { return nil }
-        defer { freeifaddrs(addrs) }
-        var inBytes: UInt32 = 0, outBytes: UInt32 = 0
-        var cursor: UnsafeMutablePointer<ifaddrs>? = first
-        while let ifa = cursor {
-            defer { cursor = ifa.pointee.ifa_next }
-            guard let sa = ifa.pointee.ifa_addr, sa.pointee.sa_family == UInt8(AF_LINK),
-                  let data = ifa.pointee.ifa_data else { continue }
-            let name = String(cString: ifa.pointee.ifa_name)
-            guard name.hasPrefix("en") else { continue }
-            let d = data.assumingMemoryBound(to: if_data.self).pointee
-            inBytes &+= d.ifi_ibytes
-            outBytes &+= d.ifi_obytes
+    /// Bytes in and out of each physical interface (en*), from the kernel's
+    /// 64-bit counters (NET_RT_IFLIST2). getifaddrs only has 32-bit ones, which
+    /// wrap every 4 GiB.
+    private static func networkBytes() -> [String: InterfaceBytes]? {
+        var mib: [Int32] = [CTL_NET, PF_ROUTE, 0, 0, NET_RT_IFLIST2, 0]
+        var length = 0
+        guard sysctl(&mib, UInt32(mib.count), nil, &length, nil, 0) == 0, length > 0 else { return nil }
+        var buffer = [UInt8](repeating: 0, count: length)
+        guard sysctl(&mib, UInt32(mib.count), &buffer, &length, nil, 0) == 0 else { return nil }
+        var result: [String: InterfaceBytes] = [:]
+        buffer.withUnsafeBytes { raw in
+            var offset = 0
+            while offset + MemoryLayout<if_msghdr>.size <= length {
+                let header = raw.loadUnaligned(fromByteOffset: offset, as: if_msghdr.self)
+                guard header.ifm_msglen > 0 else { break }
+                defer { offset += Int(header.ifm_msglen) }
+                guard header.ifm_type == UInt8(RTM_IFINFO2),
+                      offset + MemoryLayout<if_msghdr2>.size <= length else { continue }
+                let message = raw.loadUnaligned(fromByteOffset: offset, as: if_msghdr2.self)
+                var name = [CChar](repeating: 0, count: Int(IF_NAMESIZE))
+                guard if_indextoname(UInt32(message.ifm_index), &name) != nil else { continue }
+                let interface = name.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
+                guard interface.hasPrefix("en") else { continue }
+                result[interface] = InterfaceBytes(received: message.ifm_data.ifi_ibytes, sent: message.ifm_data.ifi_obytes)
+            }
         }
-        return (UInt64(inBytes), UInt64(outBytes))
+        return result
     }
 }
 

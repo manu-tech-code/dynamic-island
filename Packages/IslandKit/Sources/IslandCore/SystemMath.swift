@@ -31,6 +31,32 @@ public enum VolumeMath {
     }
 }
 
+/// Bytes received and sent by one network interface, from its 64-bit counters.
+public struct InterfaceBytes: Equatable, Sendable {
+    public var received: UInt64
+    public var sent: UInt64
+
+    public init(received: UInt64, sent: UInt64) {
+        self.received = received; self.sent = sent
+    }
+}
+
+public enum NetworkMath {
+    /// Bytes moved between two readings, interface by interface, then added up.
+    /// An interface only in one reading (it came or went) counts nothing, and so
+    /// does one whose counters went back (it was reset), so neither shows as a
+    /// spike. Summing first and subtracting the totals would turn either into one.
+    public static func moved(from old: [String: InterfaceBytes], to new: [String: InterfaceBytes]) -> InterfaceBytes {
+        var total = InterfaceBytes(received: 0, sent: 0)
+        for (name, now) in new {
+            guard let before = old[name] else { continue }
+            if now.received >= before.received { total.received &+= now.received - before.received }
+            if now.sent >= before.sent { total.sent &+= now.sent - before.sent }
+        }
+        return total
+    }
+}
+
 public enum DownloadNames {
     /// "Report.pdf.download" → "Report.pdf" (Safari, Chrome, Firefox partial files).
     public static func clean(_ name: String) -> String {
