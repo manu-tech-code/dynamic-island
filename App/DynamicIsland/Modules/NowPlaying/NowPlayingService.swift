@@ -3,7 +3,8 @@ import IslandCore
 import Observation
 
 /// Now Playing from any app, through the MediaRemote bridge run by /usr/bin/perl.
-/// If the bridge can't start, it falls back to asking Music or Spotify with AppleScript.
+/// If the bridge can't start, or keeps seeing nothing while Music or Spotify
+/// says it's playing, it falls back to asking them with AppleScript.
 @Observable
 final class NowPlayingService: ActivityProvider {
     enum Source: Equatable { case starting, bridge, appleScript, unavailable }
@@ -30,6 +31,8 @@ final class NowPlayingService: ActivityProvider {
     @ObservationIgnored private var artworkCache: (key: String, image: NSImage, color: NSColor?)?
     @ObservationIgnored private var expiryTask: Task<Void, Never>?
     @ObservationIgnored private var fallbackTask: Task<Void, Never>?
+    @ObservationIgnored private var missedTask: Task<Void, Never>?
+    @ObservationIgnored private var playerObservers: [NSObjectProtocol] = []
     @ObservationIgnored private var stopped = false
     /// Bumped when a paused track expires, so observers recompute `activities`.
     private var expiryTick = 0
@@ -63,11 +66,13 @@ final class NowPlayingService: ActivityProvider {
     func start() {
         stopped = false
         launchBridge()
+        watchPlayers()
     }
 
     func stop() {
         stopped = true
         fallbackTask?.cancel()
+        missedTask?.cancel()
         try? input?.close()
         process?.terminate()
         process = nil
@@ -99,7 +104,7 @@ final class NowPlayingService: ActivityProvider {
             guard !chunk.isEmpty else { return }
             for line in splitter.feed(chunk) {
                 guard let update = NowPlayingParser.parse(line: line) else { continue }
-                Task { @MainActor in self?.apply(update) }
+                Task { @MainActor in self?.bridgeReported(update) }
             }
         }
         err.fileHandleForReading.readabilityHandler = { fh in
@@ -138,8 +143,46 @@ final class NowPlayingService: ActivityProvider {
         }
     }
 
+    /// A line from the bridge. While the fallback runs, only a playing track
+    /// brings the bridge back: it seeing nothing is why the fallback runs.
+    private func bridgeReported(_ update: NowPlayingUpdate) {
+        if source == .appleScript {
+            guard update.info?.isPlaying == true else { return }
+            fallbackTask?.cancel()
+            Log.info("Now Playing back on the system source")
+        }
+        source = .bridge
+        apply(update)
+    }
+
+    /// Music and Spotify tell everyone when they play or pause (no permission
+    /// needed). One playing while the bridge has nothing playing for a few
+    /// seconds means the bridge can't see it, so the fallback takes over.
+    private func watchPlayers() {
+        guard playerObservers.isEmpty else { return }
+        let center = DistributedNotificationCenter.default()
+        for name in ["com.apple.Music.playerInfo", "com.spotify.client.PlaybackStateChanged"] {
+            playerObservers.append(center.addObserver(forName: Notification.Name(name), object: nil, queue: .main) { [weak self] note in
+                let playing = note.userInfo?["Player State"] as? String == "Playing"
+                MainActor.assumeIsolated { self?.playerReported(playing: playing) }
+            })
+        }
+    }
+
+    private func playerReported(playing: Bool) {
+        missedTask?.cancel()
+        guard playing, source != .appleScript, !stopped else { return }
+        missedTask = Task { [weak self] in
+            // The bridge reports a new track within a second when it can see it.
+            try? await Task.sleep(for: .seconds(4))
+            guard let self, !Task.isCancelled, self.source != .appleScript, self.info?.isPlaying != true,
+                  AppleScriptPlayer.running() != nil else { return }
+            Log.info("Now Playing: a player is playing but the bridge sees nothing")
+            self.startFallback()
+        }
+    }
+
     private func apply(_ update: NowPlayingUpdate) {
-        if source != .bridge { source = .bridge; fallbackTask?.cancel() }
         let wasPlaying = info?.isPlaying ?? false
         let previousTitle = info?.title
         info = update.info
@@ -303,9 +346,11 @@ final class NowPlayingService: ActivityProvider {
     private func send(_ command: String, script: String?) {
         if source == .bridge, let input {
             try? input.write(contentsOf: Data((command + "\n").utf8))
-        } else if let script {
-            AppleScriptPlayer.running()?.run(script)
-            Task { [weak self] in try? await Task.sleep(for: .milliseconds(300)); self?.pollFallback() }
+        } else if let script, let player = AppleScriptPlayer.running() {
+            Task { [weak self] in
+                await player.run(script)
+                await self?.pollFallback()
+            }
         }
     }
 
@@ -314,25 +359,24 @@ final class NowPlayingService: ActivityProvider {
     private func startFallback() {
         guard source != .appleScript else { return }
         source = .appleScript
+        missedTask?.cancel()
         Log.info("Now Playing using the AppleScript fallback (Music and Spotify only)")
         fallbackTask?.cancel()
         fallbackTask = Task { [weak self] in
             while !Task.isCancelled {
-                self?.pollFallback()
+                await self?.pollFallback()
                 try? await Task.sleep(for: .seconds(2))
             }
         }
     }
 
-    private func pollFallback() {
+    /// Asks the running player (off the main thread, through osascript).
+    private func pollFallback() async {
         guard source == .appleScript else { return }
-        guard let player = AppleScriptPlayer.running(), let state = player.state() else {
-            if info != nil { apply(NowPlayingUpdate(info: nil, artworkData: nil, event: "fallback")) }
-            source = .appleScript
-            return
-        }
+        let state = await AppleScriptPlayer.running()?.state()
+        // The bridge may have come back while the script ran.
+        guard source == .appleScript, state != nil || info != nil else { return }
         apply(NowPlayingUpdate(info: state, artworkData: nil, event: "fallback"))
-        source = .appleScript
     }
 }
 
@@ -352,7 +396,8 @@ nonisolated final class LineSplitter: @unchecked Sendable {
     }
 }
 
-/// Music or Spotify, whichever is running, via AppleScript. Never launches a player.
+/// Music or Spotify, whichever is running, via AppleScript. Never launches a
+/// player. Scripts run in osascript, off the main thread, like `MusicScripting`.
 struct AppleScriptPlayer {
     let bundleID: String
 
@@ -364,13 +409,11 @@ struct AppleScriptPlayer {
         return nil
     }
 
-    func run(_ command: String) {
-        var err: NSDictionary?
-        NSAppleScript(source: "tell application id \"\(bundleID)\" to \(command)")?.executeAndReturnError(&err)
-        if let err { Log.error("AppleScript \(command): \(err)") }
+    func run(_ command: String) async {
+        _ = await MusicScripting.run("tell application id \"\(bundleID)\" to \(command)")
     }
 
-    func state() -> NowPlayingInfo? {
+    func state() async -> NowPlayingInfo? {
         let src = """
         tell application id "\(bundleID)"
             set s to player state as text
@@ -379,8 +422,8 @@ struct AppleScriptPlayer {
             return s & "\t" & (name of t) & "\t" & (artist of t) & "\t" & (album of t) & "\t" & ((duration of t) as text) & "\t" & ((player position) as text)
         end tell
         """
-        var err: NSDictionary?
-        guard let out = NSAppleScript(source: src)?.executeAndReturnError(&err).stringValue, !out.isEmpty else { return nil }
+        // Every two seconds: a player in an odd state shouldn't fill the log.
+        guard let out = await MusicScripting.run(src, logsErrors: false), !out.isEmpty else { return nil }
         let f = out.components(separatedBy: "\t")
         guard f.count >= 6 else { return nil }
         var duration = Double(f[4].replacingOccurrences(of: ",", with: "."))
