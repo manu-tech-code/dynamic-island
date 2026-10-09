@@ -15,6 +15,7 @@ private func act(_ id: String, _ kind: ActivityKind, relevance: Double = 0.5, st
     case .downloads: .download(DownloadInfo(id: id, name: id))
     case .privacy: .privacy(PrivacyInfo(microphone: true, camera: false))
     case .messages: .messages([UnreadApp(app: id, count: 1, lastSender: id)])
+    case .agents: .agents([AgentSession(id: id, agent: .claudeCode, folder: "/\(id)", state: .working, since: t0, started: t0)])
     case .devices, .hud: .backgroundApps([])
     }
     return Activity(id: id, kind: kind, payload: payload, relevance: relevance, startedAt: t0.addingTimeInterval(started))

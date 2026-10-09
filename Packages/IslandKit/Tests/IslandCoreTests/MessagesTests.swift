@@ -51,10 +51,10 @@ import Testing
         // Existing priority lists gain the new kind where it belongs, not last: after timers.
         let saved = #"{"priority":["calendar","nowPlaying","timer","downloads","privacy","battery","shelf","backgroundApps"]}"#
         let repaired = try JSONDecoder().decode(IslandSettings.self, from: Data(saved.utf8)).normalized()
-        #expect(repaired.priority == [.calendar, .nowPlaying, .timer, .messages, .downloads, .privacy, .battery, .shelf, .backgroundApps])
+        #expect(repaired.priority == [.calendar, .nowPlaying, .timer, .agents, .messages, .downloads, .privacy, .battery, .shelf, .backgroundApps])
         // A list the user reordered keeps its order; the new kind follows the kind before it.
         let reordered = try JSONDecoder().decode(IslandSettings.self, from: Data(#"{"priority":["timer","nowPlaying"]}"#.utf8)).normalized()
-        #expect(reordered.priority.prefix(3) == [.timer, .messages, .nowPlaying])
+        #expect(reordered.priority.prefix(4) == [.timer, .agents, .messages, .nowPlaying])
     }
 
     @Test func appsCanBeTurnedOffOneByOne() throws {

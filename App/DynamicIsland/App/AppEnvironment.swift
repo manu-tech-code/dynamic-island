@@ -22,6 +22,7 @@ final class AppEnvironment {
     let privacy: PrivacyIndicatorService
     let devices: DevicesService
     let messages: MessageAlertsService
+    let agents: AgentsService
     let hud: HUDService
     let weather: WeatherService
     let clipboard: ClipboardService
@@ -52,6 +53,7 @@ final class AppEnvironment {
         privacy = PrivacyIndicatorService(settings: settings)
         devices = DevicesService(settings: settings, engine: engine)
         messages = MessageAlertsService(settings: settings, engine: engine)
+        agents = AgentsService(settings: settings, engine: engine)
         hud = HUDService(settings: settings, engine: engine, audio: audioOutput)
         weather = WeatherService(settings: settings)
         clipboard = ClipboardService(settings: settings)
@@ -71,6 +73,7 @@ final class AppEnvironment {
         audioOutput.start()
         hud.start()
         messages.start()
+        agents.start()
         fullScreen.start()
         lock.start()
         updates.start()

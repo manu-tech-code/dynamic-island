@@ -248,6 +248,7 @@ extension ActivityKind {
         case .devices: .indigo
         case .hud: .gray
         case .messages: .green
+        case .agents: .orange
         }
     }
 }

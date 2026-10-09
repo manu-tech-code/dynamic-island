@@ -7,6 +7,8 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable, Identifiable 
     case shelf, downloads, privacy, devices, hud
     /// Messages from any app, read from macOS's notification banners.
     case messages
+    /// AI coding agents at work (Claude Code, Codex…), read from their own files.
+    case agents
 
     public var id: String { rawValue }
 
@@ -23,6 +25,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable, Identifiable 
         case .devices: "AirPods and Bluetooth"
         case .hud: "Volume and brightness"
         case .messages: "Messages"
+        case .agents: "AI agents"
         }
     }
 
@@ -39,6 +42,7 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable, Identifiable 
         case .devices: "airpodspro"
         case .hud: "speaker.wave.2.fill"
         case .messages: "message.fill"
+        case .agents: "sparkles"
         }
     }
 
@@ -58,10 +62,10 @@ public enum ActivityKind: String, Codable, CaseIterable, Sendable, Identifiable 
 
     /// Kinds added after people had saved their priority lists, and the kind
     /// each goes after in an older list.
-    public static let addedAfter: [ActivityKind: ActivityKind] = [.messages: .timer]
+    public static let addedAfter: [ActivityKind: ActivityKind] = [.messages: .timer, .agents: .timer]
 
     public static let defaultPriority: [ActivityKind] = [
-        .calendar, .nowPlaying, .timer, .messages, .downloads, .privacy, .battery, .shelf, .backgroundApps,
+        .calendar, .nowPlaying, .timer, .agents, .messages, .downloads, .privacy, .battery, .shelf, .backgroundApps,
     ]
 }
 
@@ -358,6 +362,8 @@ public enum ActivityPayload: Equatable, Sendable {
     case privacy(PrivacyInfo)
     /// Unread messages, per app (the badges style).
     case messages([UnreadApp])
+    /// AI agents working now, the longest-running first.
+    case agents([AgentSession])
 }
 
 /// Something live that competes for space on the island.
@@ -393,6 +399,8 @@ public struct IslandAlert: Identifiable, Equatable, Sendable {
         case updateAvailable(version: String)
         /// Messages from another app, newest first, in the style chosen in Settings.
         case messages([MessageInfo], MessageAlertStyle)
+        /// An AI agent finished and waits for you.
+        case agentFinished(AgentFinish)
     }
 
     /// Status alerts show like a compact activity (an icon on the left, a ring on

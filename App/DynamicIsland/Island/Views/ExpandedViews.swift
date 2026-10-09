@@ -25,6 +25,7 @@ struct ExpandedView: View {
         case .download: DownloadsExpanded(model: model)
         case .privacy(let p): PrivacyExpanded(info: p, model: model)
         case .messages(let apps): MessagesExpanded(apps: apps, model: model)
+        case .agents: AgentsExpanded(model: model)
         }
     }
 }

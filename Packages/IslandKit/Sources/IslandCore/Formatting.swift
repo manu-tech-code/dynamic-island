@@ -24,6 +24,32 @@ public enum IslandFormat {
         return m == 0 ? "\(h)h" : "\(h)h \(m)m"
     }
 
+    /// Token counts, short: "950", "12.5K", "489.3M", "1.2B".
+    public static func tokens(_ n: Int) -> String {
+        switch Double(n) {
+        case 1e9...: String(format: "%.1fB", Double(n) / 1e9)
+        case 1e6...: String(format: "%.1fM", Double(n) / 1e6)
+        case 1e3...: String(format: "%.1fK", Double(n) / 1e3)
+        default: "\(n)"
+        }
+    }
+
+    /// A clock that counts up, for an agent at work: "0:42", "4:12", then "1h 05".
+    public static func elapsed(_ seconds: TimeInterval) -> String {
+        let s = Int(max(0, seconds))
+        if s < 3600 { return String(format: "%d:%02d", s / 60, s % 60) }
+        return String(format: "%dh %02d", s / 3600, (s % 3600) / 60)
+    }
+
+    /// How long something took: "40 s", "6 m 40 s", "1 h 5 m".
+    public static func took(_ seconds: TimeInterval) -> String {
+        let s = Int(max(0, seconds.rounded()))
+        if s < 60 { return "\(s) s" }
+        if s < 3600 { return s % 60 == 0 ? "\(s / 60) m" : "\(s / 60) m \(s % 60) s" }
+        let m = (s % 3600) / 60
+        return m == 0 ? "\(s / 3600) h" : "\(s / 3600) h \(m) m"
+    }
+
     /// How long ago, for a list of messages: "now", "4m", "2h", "3d".
     public static func ago(_ date: Date, from now: Date) -> String {
         let minutes = Int(now.timeIntervalSince(date) / 60)

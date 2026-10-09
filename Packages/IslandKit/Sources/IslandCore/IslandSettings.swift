@@ -323,6 +323,7 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     public var shortcuts = ShortcutsSettings()
     public var privacy = PrivacySettings()
     public var messages = MessageAlertSettings()
+    public var agents = AgentSettings()
     public var dashboard: [DashboardItem] = DashboardItem.defaults
 
     public init() {}
@@ -366,15 +367,20 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         s.clipboard.historySize = min(max(s.clipboard.historySize, 5), 100)
         s.hud.steps = min(max(s.hud.steps, 4), 64)
         s.shelf.dragActivationDistance = min(max(s.shelf.dragActivationDistance, 20), 300)
+        let wait = AgentSettings.alertMinimumRange
+        s.agents.alertMinimumSeconds = min(max(s.agents.alertMinimumSeconds, wait.lowerBound), wait.upperBound)
         let recent = MessageAlertSettings.recentLimitRange
         s.messages.recentLimit = min(max(s.messages.recentLimit, recent.lowerBound), recent.upperBound)
         var seen = Set<ActivityKind>()
         s.priority = s.priority.filter { $0.canBeLive && seen.insert($0).inserted }
         // Missing kinds go last, except ones added in a later version, which go next
         // to where they belong (Messages after Timers) instead of below everything.
+        // Several after the same kind keep their default order.
+        var placedAfter: [ActivityKind: Int] = [:]
         for k in ActivityKind.defaultPriority where !seen.contains(k) {
             if let after = ActivityKind.addedAfter[k], let i = s.priority.firstIndex(of: after) {
-                s.priority.insert(k, at: i + 1)
+                s.priority.insert(k, at: i + 1 + placedAfter[after, default: 0])
+                placedAfter[after, default: 0] += 1
             } else {
                 s.priority.append(k)
             }
@@ -398,7 +404,7 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         case glowFromArtwork, displays, showMenuBarIcon, modules
         case openWidthScale, compactMaxWidth, dashboardButton, fullScreen, visibility, revealStyle, whilePlaying, virtualNotchWhenIdle, lockIndicator, hotKey
         case nowPlaying, backgroundApps, calendar, timers, battery, systemStats
-        case shelf, downloads, devices, hud, weather, clipboard, shortcuts, privacy, dashboard, messages
+        case shelf, downloads, devices, hud, weather, clipboard, shortcuts, privacy, dashboard, messages, agents
     }
 
     /// Per-module keys from version 0.1, read once and folded into `modules`.
@@ -450,6 +456,7 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         shortcuts = c.tolerant(.shortcuts, d.shortcuts)
         privacy = c.tolerant(.privacy, d.privacy)
         messages = c.tolerant(.messages, d.messages)
+        agents = c.tolerant(.agents, d.agents)
 
         // Unknown widget kinds (from a newer version) are skipped, not fatal.
         if let raw = try? c.decodeIfPresent([[String: String]].self, forKey: .dashboard) {

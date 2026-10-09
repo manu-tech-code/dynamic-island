@@ -23,6 +23,7 @@ import Testing
         case .download: .downloads
         case .privacy: .privacy
         case .messages: .messages
+        case .agents: .agents
         }
     }
 

@@ -91,8 +91,13 @@ public enum IslandMetrics {
         case .download: (glyph, 38)                                    // ring | "100%"
         case .privacy(let p): (p.microphone && p.camera ? 36 : glyph, 18)
         case .messages(let apps): (iconRowWidth(count: min(2, apps.count)), 26)  // app icons | unread count
+        case .agents(let sessions):                                    // badges, spinner | "4:12"
+            (iconRowWidth(count: min(2, Set(sessions.map(\.agent)).count)) + glyphSpacing + agentSpinner, 44)
         }
     }
+
+    /// The working agents' spinner, beside their badges.
+    public static let agentSpinner: CGFloat = 14
 
     public static func iconRowWidth(count: Int) -> CGFloat {
         guard count > 0 else { return 0 }
@@ -253,6 +258,7 @@ public enum IslandMetrics {
         case .devices: CGSize(width: 460, height: 150)
         case .hud: CGSize(width: 420, height: 100)
         case .messages: CGSize(width: 440, height: 150)
+        case .agents: CGSize(width: 460, height: 176)
         }
     }
 

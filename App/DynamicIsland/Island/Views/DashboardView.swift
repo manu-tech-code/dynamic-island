@@ -102,7 +102,9 @@ struct WidgetView: View {
     let model: IslandViewModel
 
     var body: some View {
-        IslandCard(title: item.kind.displayName, symbol: item.kind.symbolName, radius: radius) {
+        // The agents card is titled by the style chosen for it.
+        IslandCard(title: item.kind == .agents ? model.settings.agents.card.cardTitle : item.kind.displayName,
+                   symbol: item.kind.symbolName, radius: radius) {
             switch item.kind {
             case .nowPlaying: NowPlayingWidget(size: item.size)
             case .calendar: CalendarWidget(size: item.size)
@@ -118,6 +120,7 @@ struct WidgetView: View {
             case .shortcuts: ShortcutsWidget(size: item.size)
             case .devices: DevicesWidget(size: item.size)
             case .messages: MessagesWidget(size: item.size, model: model)
+            case .agents: AgentsWidget(size: item.size, model: model)
             }
         }
     }
