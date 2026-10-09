@@ -93,5 +93,55 @@ import Testing
         #expect(n.rect.height == CGFloat(30))
         #expect(n.rect.midX == CGFloat(1512 + 960))
         #expect(n.rect.maxY == CGFloat(982))
+        #expect(!n.menuBarHidden)
+    }
+
+    @Test func autoHiddenMenuBar() {
+        let n = NotchMath.notch(screenFrame: CGRect(x: 0, y: 0, width: 1920, height: 1080),
+                                visibleFrame: CGRect(x: 0, y: 0, width: 1920, height: 1080), safeAreaTop: 0,
+                                auxiliaryTopLeft: nil, auxiliaryTopRight: nil)
+        #expect(n.menuBarHidden)
+        #expect(n.rect.height == CGFloat(32))
+        // Nothing stays over windows when idle, even when asked for; something live still shows.
+        #expect(!n.drawsVirtualNotch(idle: true, whenIdle: true))
+        #expect(n.drawsVirtualNotch(idle: false, whenIdle: false))
+    }
+
+    @Test func virtualNotchOnlyWhenWanted() {
+        let virtual = NotchRect(rect: CGRect(x: 0, y: 0, width: 185, height: 24), isHardware: false)
+        #expect(!virtual.drawsVirtualNotch(idle: true, whenIdle: false))
+        #expect(virtual.drawsVirtualNotch(idle: true, whenIdle: true))
+        #expect(virtual.drawsVirtualNotch(idle: false, whenIdle: false))
+        let real = NotchRect(rect: CGRect(x: 0, y: 0, width: 185, height: 32), isHardware: true)
+        #expect(!real.drawsVirtualNotch(idle: false, whenIdle: true))
+    }
+}
+
+@Suite struct PanelSizeTests {
+    @Test func roomForTheWidestDashboardWithEveryRow() {
+        let panel = IslandMetrics.panelSize(notchHeight: 38)
+        let widest = DashboardLayout.size(rows: DashboardLayout.maxRows, notchHeight: 38,
+                                          width: DashboardLayout.width(scale: IslandSettings.widthScaleRange.upperBound))
+        #expect(panel.width >= widest.width + 2 * IslandMetrics.shoulder + 2 * IslandMetrics.glowMargin)
+        #expect(panel.height >= widest.height + IslandMetrics.glowMargin)
+    }
+
+    @Test func roomForTheWidestCompactIslandAndEveryOpenState() {
+        let panel = IslandMetrics.panelSize(notchHeight: 32)
+        #expect(panel.width >= IslandMetrics.compactWidest + 2 * IslandMetrics.shoulder)
+        let wide = IslandSettings.widthScaleRange.upperBound
+        for kind in ActivityKind.allCases {
+            #expect(panel.width > IslandMetrics.expandedSize(for: kind, widthScale: wide).width + 2 * IslandMetrics.shoulder)
+        }
+        #expect(panel.height > IslandMetrics.nowPlayingDetail.height)
+    }
+
+    @Test func compactIslandStopsAtTheWidest() {
+        let apps = (0..<24).map { RunningAppInfo(pid: Int32($0), bundleID: "b\($0)", name: "App \($0)") }
+        let others = (0..<11).map { Activity(id: "t\($0)", kind: .timer, payload: .timer(TimerInfo(label: "T", duration: 60, endDate: Date()))) }
+        let ranked = RankedActivities(visible: [Activity(id: "a", kind: .backgroundApps, payload: .backgroundApps(apps))] + others)
+        let fit = IslandMetrics.fitCompact(notch: CGSize(width: 185, height: 32), style: .beside, ranked: ranked, iconLimit: 24,
+                                           dashboardButton: true, maxWidth: IslandMetrics.compactWidest)
+        #expect(fit.size.width <= IslandMetrics.compactWidest)
     }
 }

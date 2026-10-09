@@ -46,10 +46,9 @@ final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
 
 /// One island on one display: its panel, hit testing, hover, gestures and menu.
 final class IslandController: NSObject {
-    /// Room for the tallest dashboard (three widget rows) plus the glow.
-    static let panelSize = CGSize(width: 860, height: 600)
-
     let displayID: CGDirectDisplayID
+    /// Room for the island at its widest and tallest, plus the glow (see `IslandMetrics.panelSize`).
+    private var panelSize = CGSize.zero
     let model: IslandViewModel
     private let env: AppEnvironment
     private let panel: IslandPanel
@@ -105,6 +104,10 @@ final class IslandController: NSObject {
             self.panel.orderOut(nil)
             if !self.hiddenForFullScreen { self.panel.orderFrontRegardless() }
         }
+        // Going idle on a display without a notch: the menu bar under the pointer gets its clicks back.
+        whenChanged({ [model] in model.isIdleWithoutNotch }) { [weak self] _ in
+            self?.pointerMoved(to: NSEvent.mouseLocation)
+        }
         // Full-screen apps: hide or show per the user's choice.
         whenChanged({ [weak self] in self?.shouldHideForFullScreen ?? false }) { [weak self] hide in
             self?.setHiddenForFullScreen(hide)
@@ -139,7 +142,8 @@ final class IslandController: NSObject {
         let notch = Self.notch(for: screen)
         if model.notch != notch { model.notch = notch }
         screenTop = screen.frame.maxY
-        let size = Self.panelSize
+        let size = IslandMetrics.panelSize(notchHeight: notch.rect.height)
+        panelSize = size
         panel.setFrame(CGRect(x: notch.rect.midX - size.width / 2, y: screenTop - size.height, width: size.width, height: size.height), display: true)
         lockIsland.update(notch: notch, screenTop: screenTop)
         // Re-assert: these flags can be dropped when a window is reordered.
@@ -187,7 +191,11 @@ final class IslandController: NSObject {
         return CGRect(x: model.notch.rect.midX - s.width / 2, y: screenTop - s.height, width: s.width, height: s.height)
     }
 
-    func contains(_ p: NSPoint) -> Bool { islandRect.insetBy(dx: -3, dy: -3).contains(p) }
+    /// Whether the pointer is on the island. An idle island on a display without
+    /// a notch is never under it: the menu bar there keeps its clicks.
+    func contains(_ p: NSPoint) -> Bool {
+        !model.isIdleWithoutNotch && islandRect.insetBy(dx: -3, dy: -3).contains(p)
+    }
 
     // MARK: pointer
 
@@ -195,7 +203,7 @@ final class IslandController: NSObject {
         guard !env.lock.isLocked else { return }
         // Most moves are nowhere near the island (it never leaves its panel):
         // after the first one out there, which settles hover and reveal, skip them.
-        let near = p.y >= screenTop - Self.panelSize.height && abs(p.x - model.notch.rect.midX) <= Self.panelSize.width / 2
+        let near = p.y >= screenTop - panelSize.height && abs(p.x - model.notch.rect.midX) <= panelSize.width / 2
         defer { pointerWasNear = near }
         guard near || pointerWasNear else { return }
         if model.hidesUntilHover { updateReveal(at: p) }

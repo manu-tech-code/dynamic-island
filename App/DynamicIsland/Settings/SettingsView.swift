@@ -165,7 +165,13 @@ private struct GeneralPane: View {
                 Picker("When an app is full screen", selection: $store.settings.fullScreen) {
                     ForEach(FullScreenBehavior.allCases) { Text($0.displayName).tag($0) }
                 }
-                Toggle("Show the virtual notch on displays without a camera", isOn: $store.settings.virtualNotchWhenIdle)
+                Toggle(isOn: $store.settings.virtualNotchWhenIdle) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Keep a black notch on displays without a camera")
+                        Text("Off, the middle of the menu bar stays free and clickable until something shows on the island. It's never drawn while the menu bar hides itself.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
                 Toggle("Show the lock opening on the island when you unlock", isOn: $store.settings.lockIndicator)
             } header: {
                 Text("Where it shows")
