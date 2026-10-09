@@ -33,6 +33,10 @@ struct NotificationsPane: View {
                         }
                     }
                 }
+                if !messages.trusted {
+                    Text("Already switched on in System Settings › Privacy & Security › Accessibility? After an update macOS can need it again: remove Dynamic Island from that list with −, then allow it here.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
             Group {
                 Section {
@@ -61,7 +65,7 @@ struct NotificationsPane: View {
                     Toggle(isOn: $store.settings.messages.hideSystemBanner) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Hide macOS's banner")
-                            Text("Messages show once, on the island, for the apps switched on below: macOS's own banner is kept out of sight. They still go into Notification Center, and clicking one on the island opens its conversation. Alerts that wait for an answer come back after a few seconds.")
+                            Text("Messages show once, on the island, for the apps switched on below: macOS's own banner is kept out of sight, on the display the island is on. They still go into Notification Center, and clicking one on the island opens its conversation. Anything the island doesn't show stays on screen, and alerts that wait for an answer come back after a few seconds.")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }

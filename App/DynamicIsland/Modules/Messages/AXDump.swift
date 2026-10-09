@@ -25,7 +25,7 @@ enum AXDump {
                 AXUIElementCopyActionDescription(b.element, name as CFString, &desc)
                 return "[\(name.replacingOccurrences(of: "\n", with: " | "))] = \(desc as String? ?? "")"
             }
-            return "\(b.appName): " + actions.joined(separator: " ; ")
+            return "\(b.appName ?? "?"): " + actions.joined(separator: " ; ")
         }.joined(separator: "\n")
     }
 
@@ -225,7 +225,18 @@ enum AXDump {
     }
 
     /// Just the windows: title, subrole, size.
+    /// Whether the menu bar clock is found among the status items (not by its place).
+    static func clock() -> String {
+        guard let clock = NotificationBannerReader.menuBarClock(orByPlace: false) else { return "not among the status items" }
+        var pid: pid_t = 0
+        AXUIElementGetPid(clock, &pid)
+        var parent: CFTypeRef?
+        let nested = AXUIElementCopyAttributeValue(clock, kAXParentAttribute as CFString, &parent) == .success
+        return "found in \(NSRunningApplication(processIdentifier: pid)?.bundleIdentifier ?? "?"), parent \(nested)"
+    }
+
     static func windows() -> String {
+        Log.info("ax clock: " + clock())
         guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.notificationcenterui").first else { return "-" }
         var kids: CFTypeRef?
         guard AXUIElementCopyAttributeValue(AXUIElementCreateApplication(app.processIdentifier), kAXWindowsAttribute as CFString, &kids) == .success,

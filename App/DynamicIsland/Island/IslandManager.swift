@@ -20,6 +20,8 @@ final class IslandManager {
 
     func start() {
         rebuild()
+        // macOS's banners are only kept out of sight on a display the island is on.
+        env.messages.islandDisplays = { [weak self] in Set(self?.controllers.keys.map { $0 } ?? []) }
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.rebuild() }
