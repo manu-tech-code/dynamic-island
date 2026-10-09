@@ -36,6 +36,7 @@ final class AgentsService: ActivityProvider {
     @ObservationIgnored private var pending: Set<String> = []
     @ObservationIgnored private var readTask: Task<Void, Never>?
     @ObservationIgnored private var sweep: Task<Void, Never>?
+    @ObservationIgnored private var askedShell = false
     /// The variables that move the agents' folders: this app's, then your login shell's.
     @ObservationIgnored private var environment = ProcessInfo.processInfo.environment.filter { AgentFolders.variables.contains($0.key) }
     /// The watched folders that exist, to notice one appearing.
@@ -68,8 +69,13 @@ final class AgentsService: ActivityProvider {
             return "\(s[module: .agents].enabled) \(AgentKind.allCases.map { s.agents.isOn($0) })"
         }) { [weak self] _ in self?.update() }
         update()
-        // An app opened from the Dock doesn't see what your shell profile exports,
-        // which can move the agents' folders: asked of your shell, once.
+    }
+
+    /// An app opened from the Dock doesn't see what your shell profile exports,
+    /// which can move the agents' folders: asked of your shell once, when agents are on.
+    private func askShell() {
+        guard !askedShell else { return }
+        askedShell = true
         Task { [weak self] in
             let shell = await Task.detached { LoginShell.variables(AgentFolders.variables) }.value
             guard let self, !shell.isEmpty else { return }
@@ -93,6 +99,7 @@ final class AgentsService: ActivityProvider {
             return
         }
         detect(restart: true)
+        askShell()
         // Now and then: a session whose app quit without tidying up, or one that
         // went quiet; and, each minute, agents installed since.
         sweep = Task { [weak self] in
