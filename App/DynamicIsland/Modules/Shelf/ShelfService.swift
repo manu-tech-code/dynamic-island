@@ -198,7 +198,7 @@ final class ShelfService: ActivityProvider {
     private func write(_ data: Data?, name: String) -> URL? {
         guard let data else { return nil }
         let url = folder.appendingPathComponent(name.replacingOccurrences(of: "/", with: "-"))
-        do { try data.write(to: url); return url } catch { Log.error("shelf write failed: \(error)"); return nil }
+        do { try data.write(to: url); return url } catch { Log.error("shelf write failed: \(private: error)"); return nil }
     }
 
     private func refresh(_ item: ShelfItemInfo, to url: URL) {

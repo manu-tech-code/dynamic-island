@@ -144,7 +144,7 @@ final class WeatherService: NSObject, CLLocationManagerDelegate {
                 r.place = placeName
                 report = r
                 state = .ready
-                Log.info("weather: \(Int(r.temperature))° \(r.condition.summary) \(placeName ?? "")")
+                Log.info("weather: \(r.condition.summary) \(private: "\(Int(r.temperature))° \(placeName ?? "")")")
             } catch {
                 state = .failed("Couldn't reach Open-Meteo")
             }

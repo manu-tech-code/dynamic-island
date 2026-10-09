@@ -24,7 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotKey: HotKey?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        Log.info("launch · \(ProcessInfo.processInfo.operatingSystemVersionString) · \(Bundle.main.bundleURL.path)")
+        Log.info("launch · \(ProcessInfo.processInfo.operatingSystemVersionString) · \((Bundle.main.bundleURL.path as NSString).abbreviatingWithTildeInPath)")
         let settingsWindow = SettingsWindowController(env: env)
         self.settingsWindow = settingsWindow
         // Opening Settings from anywhere (the dashboard's gear, Add Widgets…, a menu,
@@ -107,7 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let command = url.host ?? url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let query = Dictionary(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.map { ($0.name, $0.value ?? "") } ?? [],
                                uniquingKeysWith: { $1 })
-        Log.info("url command: \(command) \(query)")
+        Log.info("url command: \(command) \(private: query)")
         switch command {
         case "dashboard": islands.toggleDashboard()
         case "collapse": islands.controllers.values.forEach { $0.model.collapse() }

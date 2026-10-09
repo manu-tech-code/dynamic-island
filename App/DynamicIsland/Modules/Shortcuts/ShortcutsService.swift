@@ -29,13 +29,13 @@ final class ShortcutsService {
         guard !running.contains(name) else { return }
         running.insert(name)
         lastError = nil
-        Log.info("shortcut: running \(name)")
+        Log.info("shortcut: running \(private: name)")
         Task {
             let result = await Self.run(["run", name])
             running.remove(name)
             if let result, result.status != 0 {
                 lastError = "“\(name)” didn’t finish"
-                Log.error("shortcut \(name) failed: \(result.errorOutput)")
+                Log.error("shortcut \(private: name) failed (\(result.status)): \(private: result.errorOutput)")
             }
         }
     }

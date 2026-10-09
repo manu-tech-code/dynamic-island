@@ -97,7 +97,7 @@ final class AudioOutputService {
         var id = device.id
         var addr = Self.address(kAudioHardwarePropertyDefaultOutputDevice)
         let status = AudioObjectSetPropertyData(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, UInt32(MemoryLayout<AudioDeviceID>.size), &id)
-        if status != noErr { Log.error("set default output to \(device.name) failed: \(status)") }
+        if status != noErr { Log.error("set default output to \(private: device.name) failed: \(status)") }
         refresh()
     }
 

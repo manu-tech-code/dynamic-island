@@ -39,8 +39,8 @@ final class LyricsService {
             if case .failed = result {} else { self.cache[key] = result }
             self.state = result
             switch result {
-            case .loaded(let l): Log.info("lyrics: \(l.synced.count) synced lines, plain \(l.plain != nil) for \(key)")
-            default: Log.info("lyrics: \(result) for \(key)")
+            case .loaded(let l): Log.info("lyrics: \(l.synced.count) synced lines, plain \(l.plain != nil) for \(private: key)")
+            default: Log.info("lyrics: \(result) for \(private: key)")
             }
         }
     }

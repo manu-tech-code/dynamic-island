@@ -130,7 +130,7 @@ final class DevicesService: NSObject {
         disconnectNotes.removeValue(forKey: id)?.unregister()
         guard let info = connected.first(where: { $0.id == id }) else { return }
         connected.removeAll { $0.id == id }
-        Log.info("bluetooth disconnected: \(info.name)")
+        Log.info("bluetooth disconnected: \(private: info.name)")
         if settings.settings.devices.alertOnDisconnect, info.kind.isAudio {
             engine.post(IslandAlert(kind: .devices, style: .deviceDisconnected(name: info.name, kind: info.kind), holdSeconds: 2.5))
         }
@@ -143,7 +143,7 @@ final class DevicesService: NSObject {
             disconnectNotes[info.id] = device.register(forDisconnectNotification: self, selector: #selector(deviceDisconnected(_:device:)))
         }
         guard announce else { return }
-        Log.info("bluetooth connected: \(info.name) (\(info.kind))")
+        Log.info("bluetooth connected: \(private: info.name) (\(info.kind))")
         guard settings.settings.devices.alertOnConnect, info.kind.isAudio || info.hasBattery else { return }
         // Give earbuds a moment to report their batteries before announcing.
         let address = info.id

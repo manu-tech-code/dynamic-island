@@ -130,7 +130,8 @@ enum MusicScripting {
                 let data = out.fileHandleForReading.readDataToEndOfFile()
                 let errText = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
                 if proc.terminationStatus != 0 {
-                    if logsErrors { Log.error("osascript failed (\(proc.terminationStatus)): \(errText.trimmingCharacters(in: .whitespacesAndNewlines))") }
+                    // Its message can quote a track or a speaker by name.
+                    if logsErrors { Log.error("osascript failed (\(proc.terminationStatus)): \(private: errText.trimmingCharacters(in: .whitespacesAndNewlines))") }
                     continuation.resume(returning: nil)
                 } else {
                     continuation.resume(returning: String(data: data, encoding: .utf8)?.trimmingCharacters(in: .newlines))

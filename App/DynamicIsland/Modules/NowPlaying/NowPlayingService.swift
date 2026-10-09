@@ -187,7 +187,11 @@ final class NowPlayingService: ActivityProvider {
         let previousTitle = info?.title
         info = update.info
         if update.info?.title != previousTitle || update.info?.isPlaying != wasPlaying {
-            Log.info("now playing: \(update.info.map { "\($0.isPlaying ? "▶" : "⏸") \($0.title) — \($0.artist)" } ?? "nothing") [\(update.event)]")
+            if let i = update.info {
+                Log.info("now playing: \(i.isPlaying ? "▶" : "⏸") \(private: i.title) — \(private: i.artist) [\(update.event)]")
+            } else {
+                Log.info("now playing: nothing [\(update.event)]")
+            }
         }
 
         guard let new = update.info else {
@@ -238,7 +242,11 @@ final class NowPlayingService: ActivityProvider {
             if (q?.tracks.count ?? 0) <= 1, music { q = await MusicScripting.queue() ?? q }
             guard !Task.isCancelled else { return }
             self?.queueLoading = false
-            Log.info("up next: \(q.map { "\($0.playlist) \($0.currentIndex)/\($0.total), next \($0.upNext?.title ?? "none")" } ?? "unavailable")")
+            if let q {
+                Log.info("up next: \(private: q.playlist) \(q.currentIndex)/\(q.total), next \(private: q.upNext?.title ?? "none")")
+            } else {
+                Log.info("up next: unavailable")
+            }
             self?.queue = q
         }
     }

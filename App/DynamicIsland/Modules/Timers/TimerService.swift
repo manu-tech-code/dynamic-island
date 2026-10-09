@@ -107,7 +107,7 @@ final class TimerService: ActivityProvider {
         guard !done.isEmpty else { scheduleFinish(); return }
         timers.removeAll { t in done.contains { $0.id == t.id } }
         for t in done {
-            Log.info("timer finished: \(t.label)")
+            Log.info("timer finished: \(private: t.label)")
             engine.post(IslandAlert(kind: .timer, style: .timerFinished(label: t.label), holdSeconds: 4))
         }
         if settings.settings.timers.playSound { NSSound(named: "Glass")?.play() }
