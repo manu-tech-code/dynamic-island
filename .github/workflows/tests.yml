@@ -17,3 +17,20 @@ jobs:
       - name: swift test
         working-directory: Packages/IslandKit
         run: swift test
+
+  app:
+    # The app itself, built on macOS 26 (the oldest macOS it supports) with the
+    # runner's default Xcode. Unsigned: CI has no signing certificate.
+    name: App build
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Build
+        run: |
+          xcodebuild -version
+          xcodegen generate --quiet
+          xcodebuild -project DynamicIsland.xcodeproj -scheme DynamicIsland -configuration Debug \
+            -derivedDataPath build/DerivedData -destination 'platform=macOS,arch=arm64' \
+            CODE_SIGNING_ALLOWED=NO build -quiet
