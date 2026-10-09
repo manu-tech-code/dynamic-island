@@ -165,6 +165,8 @@ struct IslandContent: View {
             DashboardView(model: model)
         case .shelf:
             ShelfView(model: model)
+        case .recentMessages:
+            RecentMessagesView(model: model)
         case .alert(let alert):
             AlertView(alert: alert, model: model)
         }

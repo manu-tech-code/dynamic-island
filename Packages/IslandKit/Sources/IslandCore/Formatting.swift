@@ -24,6 +24,15 @@ public enum IslandFormat {
         return m == 0 ? "\(h)h" : "\(h)h \(m)m"
     }
 
+    /// How long ago, for a list of messages: "now", "4m", "2h", "3d".
+    public static func ago(_ date: Date, from now: Date) -> String {
+        let minutes = Int(now.timeIntervalSince(date) / 60)
+        if minutes < 1 { return "now" }
+        if minutes < 60 { return "\(minutes)m" }
+        if minutes < 24 * 60 { return "\(minutes / 60)h" }
+        return "\(minutes / (24 * 60))d"
+    }
+
     /// "in 18 min", "now", "in 1 h 5 min".
     public static func untilLong(_ date: Date, from now: Date) -> String {
         let minutes = Int((date.timeIntervalSince(now) / 60).rounded(.up))

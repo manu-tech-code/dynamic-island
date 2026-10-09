@@ -88,6 +88,12 @@ public struct MessageAlertSettings: Codable, Equatable, Sendable {
     /// Keep macOS's own banner out of sight for apps the island shows, so a
     /// message appears once. It still goes into Notification Center's list.
     public var hideSystemBanner = true
+    /// Keep the messages that reached the island in a list on it (the dashboard's
+    /// messages button and widget), until the app quits.
+    public var keepRecent = true
+    /// How many recent messages the list keeps.
+    public var recentLimit = 20
+    public static let recentLimitRange = 5...100
     public init() {}
 
     /// Whether this app's notifications show on the island.
@@ -96,6 +102,61 @@ public struct MessageAlertSettings: Codable, Equatable, Sendable {
     /// Every app shows until it's turned off, except music and podcast apps:
     /// they announce each song, which the island shows already.
     public static func shownByDefault(app: String) -> Bool { !MessagingApps.isMedia(app: app) }
+}
+
+/// Messages that reached the island lately, newest first, so one you missed is
+/// still there to open. Kept only in memory, never saved: they go when the app quits.
+public struct RecentMessages: Equatable, Sendable {
+    public struct Entry: Equatable, Sendable, Identifiable {
+        public var message: MessageInfo
+        /// Opened from the island, or its app was opened since.
+        public var read: Bool
+        public var id: String { message.id }
+    }
+
+    public private(set) var entries: [Entry] = []
+    public private(set) var limit: Int
+
+    public init(limit: Int = MessageAlertSettings().recentLimit) { self.limit = max(1, limit) }
+
+    public var isEmpty: Bool { entries.isEmpty }
+    public var unreadCount: Int { entries.count { !$0.read } }
+
+    /// On top, unread. The same notification read again replaces itself, and the
+    /// oldest go once there are more than the limit.
+    public mutating func add(_ message: MessageInfo) {
+        entries.removeAll { $0.id == message.id }
+        entries.insert(Entry(message: message, read: false), at: 0)
+        trim()
+    }
+
+    public mutating func setLimit(_ limit: Int) {
+        self.limit = max(1, limit)
+        trim()
+    }
+
+    public mutating func markRead(id: String) {
+        for i in entries.indices where entries[i].id == id { entries[i].read = true }
+    }
+
+    /// Opening an app reads its messages.
+    public mutating func markRead(app: String?, bundleID: String?) {
+        for i in entries.indices {
+            let m = entries[i].message
+            if (bundleID != nil && m.bundleID == bundleID) || (app != nil && m.app == app) { entries[i].read = true }
+        }
+    }
+
+    public mutating func markAllRead() {
+        for i in entries.indices { entries[i].read = true }
+    }
+
+    public mutating func remove(id: String) { entries.removeAll { $0.id == id } }
+    public mutating func removeAll() { entries = [] }
+
+    private mutating func trim() {
+        if entries.count > limit { entries.removeLast(entries.count - limit) }
+    }
 }
 
 /// Apps people send messages with, for "only messaging apps".

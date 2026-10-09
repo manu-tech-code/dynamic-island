@@ -366,6 +366,8 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         s.clipboard.historySize = min(max(s.clipboard.historySize, 5), 100)
         s.hud.steps = min(max(s.hud.steps, 4), 64)
         s.shelf.dragActivationDistance = min(max(s.shelf.dragActivationDistance, 20), 300)
+        let recent = MessageAlertSettings.recentLimitRange
+        s.messages.recentLimit = min(max(s.messages.recentLimit, recent.lowerBound), recent.upperBound)
         var seen = Set<ActivityKind>()
         s.priority = s.priority.filter { $0.canBeLive && seen.insert($0).inserted }
         // Missing kinds go last, except ones added in a later version, which go next
