@@ -60,7 +60,8 @@ Branches, pull requests and releases: see [CONTRIBUTING.md](CONTRIBUTING.md).
 - Drag the left or right edge of the island, compact or open, to change its width. The same
   width applies to both (also in Settings › Layout › Width, or Narrow/Standard/Wide in the menu).
 - Scroll down on the island to open, up to close. Right-click for the menu.
-- <kbd>⌥⌘I</kbd> (changeable in Settings › General) opens the dashboard from anywhere; <kbd>Esc</kbd> closes it.
+- Record a keyboard shortcut in Settings › General to open the dashboard from anywhere (there's
+  none until you do); <kbd>Esc</kbd> closes it.
 - Drag a file toward the notch to open the shelf; drop to keep it, drag it out later.
 - Settings: right-click › Settings…, or open the app again from Finder.
 

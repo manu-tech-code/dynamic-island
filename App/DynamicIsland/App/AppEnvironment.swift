@@ -32,6 +32,8 @@ final class AppEnvironment {
     let updates: UpdateService
 
     @ObservationIgnored var openSettings: () -> Void = {}
+    /// The dashboard's keyboard shortcut couldn't be registered: another app has it.
+    var hotKeyTaken = false
 
     init() {
         let settings = SettingsStore()

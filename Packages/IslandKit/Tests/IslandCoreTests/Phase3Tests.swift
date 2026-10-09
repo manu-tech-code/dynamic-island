@@ -71,7 +71,7 @@ import Testing
         let clamped = IslandSettings.decode(Data(#"{"openWidthScale":9,"compactMaxWidth":50}"#.utf8))
         #expect(clamped.openWidthScale == IslandSettings.widthScaleRange.upperBound)
         #expect(clamped.compactMaxWidth == IslandSettings.compactMaxWidthRange.lowerBound)
-        #expect(IslandSettings().hotKey == .default)
+        #expect(IslandSettings().hotKey == nil)
     }
 }
 

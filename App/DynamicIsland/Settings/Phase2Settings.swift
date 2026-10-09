@@ -244,19 +244,21 @@ enum LocationText {
 // MARK: shortcut recorder
 
 /// Click, then press the new shortcut. Esc cancels. Needs at least one of ⌘⌥⌃.
+/// There's none until one is recorded; Clear removes it.
 struct HotKeyRecorder: View {
     @Environment(AppEnvironment.self) private var env
     @State private var recording = false
     @State private var monitor: Any?
 
     var body: some View {
+        let key = env.settings.settings.hotKey
         HStack(spacing: 8) {
-            Button(recording ? "Type a shortcut…" : env.settings.settings.hotKey.label) {
+            Button(recording ? "Type a shortcut…" : key?.label ?? "Record Shortcut") {
                 recording ? stop() : start()
             }
-            .font(.body.monospaced())
-            if env.settings.settings.hotKey != .default {
-                Button("Reset") { env.settings.settings.hotKey = .default }
+            .font(key == nil || recording ? .body : .body.monospaced())
+            if key != nil, !recording {
+                Button("Clear") { env.settings.settings.hotKey = nil }
             }
         }
         .onDisappear(perform: stop)
@@ -269,10 +271,10 @@ struct HotKeyRecorder: View {
             let mods = event.modifierFlags.intersection([.command, .option, .control, .shift])
             guard !mods.isDisjoint(with: [.command, .option, .control]) else { NSSound.beep(); return nil }
             var carbon = 0
-            if mods.contains(.command) { carbon |= 256 }
-            if mods.contains(.shift) { carbon |= 512 }
-            if mods.contains(.option) { carbon |= 2048 }
-            if mods.contains(.control) { carbon |= 4096 }
+            if mods.contains(.command) { carbon |= HotKeySpec.command }
+            if mods.contains(.shift) { carbon |= HotKeySpec.shift }
+            if mods.contains(.option) { carbon |= HotKeySpec.option }
+            if mods.contains(.control) { carbon |= HotKeySpec.control }
             let label = Self.symbols(mods) + Self.keyName(event)
             env.settings.settings.hotKey = HotKeySpec(keyCode: Int(event.keyCode), carbonModifiers: carbon, label: label)
             stop()

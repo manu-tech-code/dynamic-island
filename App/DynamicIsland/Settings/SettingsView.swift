@@ -174,6 +174,10 @@ private struct GeneralPane: View {
             }
             Section("Controls") {
                 LabeledContent("Open or close the dashboard") { HotKeyRecorder() }
+                if env.hotKeyTaken, let key = store.settings.hotKey {
+                    Text("\(key.label) is already used by another app, so it doesn't work here. Record a different shortcut.")
+                        .font(.callout).foregroundStyle(.orange)
+                }
                 LabeledContent("Open the island") { Text("Click, or scroll down on it") }
                 LabeledContent("Close the island") { Text("Click outside, or scroll up") }
                 LabeledContent("Island menu") { Text("Right-click the island") }
@@ -607,7 +611,7 @@ private struct ModulesPane: View {
             Toggle(isOn: $store.settings.nowPlaying.waveformFollowsAudio) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Waveform follows the music")
-                    Text("The bars move with what your Mac is playing. macOS asks for System Audio Recording permission and shows a purple dot by Control Center while the waveform is moving. The sound is only measured, never recorded or sent.")
+                    Text("The bars move with what your Mac is playing instead of on their own. Turning this on makes macOS ask for System Audio Recording permission, and it shows its purple recording dot by Control Center while the waveform is moving. The sound is only measured, never recorded or sent.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }

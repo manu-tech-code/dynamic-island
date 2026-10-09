@@ -132,8 +132,26 @@ public struct HotKeySpec: Codable, Equatable, Sendable {
         self.keyCode = keyCode; self.carbonModifiers = carbonModifiers; self.label = label
     }
 
-    /// ⌥⌘I: kVK_ANSI_I = 34, cmdKey | optionKey = 256 | 2048.
-    public static let `default` = HotKeySpec(keyCode: 34, carbonModifiers: 256 | 2048, label: "⌥⌘I")
+    /// Carbon's modifier bits: cmdKey, shiftKey, optionKey, controlKey.
+    public static let command = 256, shift = 512, option = 2048, control = 4096
+
+    /// The key a menu shows for this shortcut ("i", an arrow, F5…), from the
+    /// label's key name; nil when a menu can't show it.
+    public var menuKey: String? {
+        let key = String(label.drop { "⌃⌥⇧⌘".contains($0) })
+        let special: [String: Unicode.Scalar] = [
+            "Space": " ", "↩": "\r", "⇥": "\t", "⌫": "\u{8}",
+            // AppKit's arrow keys (NSUpArrowFunctionKey…).
+            "↑": "\u{F700}", "↓": "\u{F701}", "←": "\u{F702}", "→": "\u{F703}",
+        ]
+        if let s = special[key] { return String(s) }
+        // F1…F12 (NSF1FunctionKey is 0xF704).
+        if key.count > 1, key.first == "F", let n = Int(key.dropFirst()), (1...12).contains(n),
+           let scalar = Unicode.Scalar(0xF703 + n) {
+            return String(scalar)
+        }
+        return key.count == 1 ? key.lowercased() : nil
+    }
 }
 
 public struct ModuleSettings: Codable, Equatable, Sendable {
@@ -158,8 +176,9 @@ public struct NowPlayingSettings: Codable, Equatable, Sendable {
     public var titleOnHover: Bool = true
     /// A new song shows its title for a moment, the island coming out if it's tucked.
     public var titleOnTrackChange: Bool = true
-    /// The waveform's bars follow the music (Core Audio tap; System Audio Recording permission).
-    public var waveformFollowsAudio: Bool = true
+    /// The waveform's bars follow the music (Core Audio tap; System Audio Recording
+    /// permission and macOS's purple dot), so it's off until turned on.
+    public var waveformFollowsAudio: Bool = false
     public init() {}
 }
 
@@ -299,10 +318,13 @@ public struct IslandSettings: Codable, Equatable, Sendable {
     /// What stays out while a song plays, when the island hides until hover.
     public var whilePlaying: PlayingStyle = .tucked
     /// On displays without a camera, draw the black virtual notch even when idle.
-    public var virtualNotchWhenIdle: Bool = true
+    /// Off, an idle island there covers nothing in the menu bar.
+    public var virtualNotchWhenIdle: Bool = false
     /// The lock opening on the island when the Mac unlocks.
     public var lockIndicator: Bool = true
-    public var hotKey: HotKeySpec = .default
+    /// Opens or closes the dashboard from anywhere. None until one is set, so
+    /// it never takes a shortcut another app already uses.
+    public var hotKey: HotKeySpec?
 
     /// Per-module on/off and compact visibility, keyed by `ActivityKind.rawValue`.
     /// Missing entries use `ActivityKind.defaultModule`.
@@ -438,7 +460,7 @@ public struct IslandSettings: Codable, Equatable, Sendable {
         whilePlaying = v(.whilePlaying, d.whilePlaying)
         virtualNotchWhenIdle = v(.virtualNotchWhenIdle, d.virtualNotchWhenIdle)
         lockIndicator = v(.lockIndicator, d.lockIndicator)
-        hotKey = c.tolerant(.hotKey, d.hotKey)
+        hotKey = (try? c.decodeIfPresent(HotKeySpec.self, forKey: .hotKey)) ?? d.hotKey
         modules = c.tolerant(.modules, [String: ModuleSettings]())
 
         nowPlaying = c.tolerant(.nowPlaying, d.nowPlaying)

@@ -42,11 +42,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         showWelcomeIfFirstLaunch()
     }
 
-    private func registerHotKey(_ spec: HotKeySpec) {
+    /// None set (the default) registers nothing. One another app holds fails,
+    /// and Settings says so.
+    private func registerHotKey(_ spec: HotKeySpec?) {
         hotKey = nil
+        guard let spec else {
+            env.hotKeyTaken = false
+            Log.info("hotkey: none")
+            return
+        }
         hotKey = HotKey(keyCode: spec.keyCode, modifiers: spec.carbonModifiers) { [weak self] in
             self?.islands.toggleDashboard()
         }
+        env.hotKeyTaken = hotKey == nil
         Log.info("hotkey \(spec.label) \(hotKey == nil ? "failed" : "registered")")
     }
 
