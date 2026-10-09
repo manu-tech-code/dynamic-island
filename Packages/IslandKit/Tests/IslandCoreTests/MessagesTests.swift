@@ -71,6 +71,16 @@ import Testing
         #expect(IslandSettings.decode(s.encoded()).messages.apps == ["Calendar": false, "Music": true])
     }
 
+    @Test func batteryPercentShowsUntilTurnedOff() throws {
+        #expect(IslandSettings().battery.showPercent)
+        // Saved before the option: still shown, the other battery settings kept.
+        let old = try JSONDecoder().decode(IslandSettings.self, from: Data(#"{"battery":{"alertOnPower":false}}"#.utf8))
+        #expect(old.battery.showPercent && !old.battery.alertOnPower)
+        var s = IslandSettings()
+        s.battery.showPercent = false
+        #expect(!IslandSettings.decode(s.encoded()).battery.showPercent)
+    }
+
     @Test func eachStyleHasItsShape() {
         let m = MessageInfo(id: "1", app: "WhatsApp", sender: "Ama", text: "Hi")
         func size(_ style: MessageAlertStyle, _ list: [MessageInfo]) -> CGSize {
