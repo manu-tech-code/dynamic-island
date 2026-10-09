@@ -48,7 +48,7 @@
 	<key>NSDownloadsFolderUsageDescription</key>
 	<string>Dynamic Island shows the progress of downloads arriving in your Downloads folder.</string>
 	<key>NSHumanReadableCopyright</key>
-	<string>Personal project</string>
+	<string>© 2026 Dynamic Island contributors</string>
 	<key>NSLocationUsageDescription</key>
 	<string>Dynamic Island shows the weather where you are. Coordinates are rounded to about 1 km.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

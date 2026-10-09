@@ -29,11 +29,13 @@ final class WeatherService: NSObject, CLLocationManagerDelegate {
         manager.desiredAccuracy = kCLLocationAccuracyReduced
     }
 
+    /// Automatic follows System Settings › General › Language & Region ›
+    /// Temperature, which can differ from the region's measurement system.
     var usesFahrenheit: Bool {
         switch settings.settings.weather.unit {
         case .celsius: false
         case .fahrenheit: true
-        case .automatic: Locale.current.measurementSystem == .us
+        case .automatic: UnitTemperature(forLocale: .current) == .fahrenheit
         }
     }
 

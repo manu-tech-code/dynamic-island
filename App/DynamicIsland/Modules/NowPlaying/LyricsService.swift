@@ -87,9 +87,15 @@ final class LyricsService {
         c.queryItems = items
         guard let url = c.url else { return nil }
         var r = URLRequest(url: url, timeoutInterval: 8)
-        r.setValue("DynamicIsland/0.1 (personal macOS app)", forHTTPHeaderField: "User-Agent")
+        r.setValue(userAgent, forHTTPHeaderField: "User-Agent")
         return r
     }
+
+    /// LRCLIB asks clients to say who they are: the app, its version and where it lives.
+    nonisolated private static let userAgent: String = {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+        return "DynamicIsland/\(version) (macOS app; https://github.com/manu-tech-code/dynamic-island)"
+    }()
 
     nonisolated private static func get(title: String, artist: String, album: String, duration: Double?) async throws -> Track? {
         var items = [URLQueryItem(name: "track_name", value: title), URLQueryItem(name: "artist_name", value: artist)]

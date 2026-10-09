@@ -215,10 +215,17 @@ final class ShelfService: ActivityProvider {
         if let data = try? JSONEncoder().encode(stored) { try? data.write(to: storeURL, options: .atomic) }
     }
 
-    private static func stamp() -> String {
+    /// For file names: the same digits whatever the language, calendar or clock setting.
+    private static let stampFormatter: DateFormatter = {
         let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.calendar = Calendar(identifier: .gregorian)
         f.dateFormat = "yyyy-MM-dd HH.mm.ss"
-        return f.string(from: Date())
+        return f
+    }()
+
+    private static func stamp() -> String {
+        stampFormatter.string(from: Date())
     }
 }
 

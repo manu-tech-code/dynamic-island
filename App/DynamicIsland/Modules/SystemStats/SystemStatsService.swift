@@ -27,6 +27,8 @@ final class SystemStatsService {
     private(set) var memoryHistory: [Double] = []
     private(set) var diskFree: Int64 = 0
     private(set) var diskTotal: Int64 = 0
+    /// The startup disk's name as Finder shows it ("Macintosh HD", or whatever it's called).
+    private(set) var diskName = ""
     private(set) var netIn: Double = 0
     private(set) var netOut: Double = 0
     private(set) var netInHistory: [Double] = []
@@ -100,9 +102,11 @@ final class SystemStatsService {
         }
         if Date().timeIntervalSince(lastDiskRead) > 30 {
             lastDiskRead = Date()
-            let values = try? URL(fileURLWithPath: "/").resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey, .volumeTotalCapacityKey])
+            let values = try? URL(fileURLWithPath: "/").resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey,
+                                                                                .volumeTotalCapacityKey, .volumeLocalizedNameKey])
             diskFree = values?.volumeAvailableCapacityForImportantUsage ?? 0
             diskTotal = Int64(values?.volumeTotalCapacity ?? 0)
+            diskName = values?.volumeLocalizedName ?? ""
         }
     }
 

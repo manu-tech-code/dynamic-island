@@ -365,7 +365,7 @@ private struct StorageWidget: View {
         StatValue(value: ByteFormat.size(stats.diskFree), detail: "free of \(ByteFormat.size(stats.diskTotal))")
         Spacer(minLength: 4)
         MeterBar(fraction: stats.diskUsedFraction, color: stats.diskUsedFraction > 0.9 ? .red : .purple)
-        Text("Macintosh HD").font(.system(size: 10.5)).foregroundStyle(.secondary)
+        Text(stats.diskName.isEmpty ? "Startup disk" : stats.diskName).font(.system(size: 10.5)).foregroundStyle(.secondary).lineLimit(1)
     }
 }
 

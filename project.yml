@@ -60,7 +60,7 @@ targets:
         NSLocationWhenInUseUsageDescription: Dynamic Island shows the weather where you are. Coordinates are rounded to about 1 km.
         NSAudioCaptureUsageDescription: Dynamic Island moves the waveform's bars with the music by measuring how loud it is. The sound is only measured, never recorded or sent anywhere.
         NSDownloadsFolderUsageDescription: Dynamic Island shows the progress of downloads arriving in your Downloads folder.
-        NSHumanReadableCopyright: Personal project
+        NSHumanReadableCopyright: © 2026 Dynamic Island contributors
         CFBundleURLTypes:
           - CFBundleURLName: com.dynamicisland.mac
             CFBundleURLSchemes: [dynamicisland]
