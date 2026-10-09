@@ -46,6 +46,11 @@ final class AudioOutputService {
 
     var current: AudioOutputDevice? { devices.first { $0.id == defaultID } }
 
+    /// The output's volume can be changed from here. Some displays and audio
+    /// interfaces have no software volume; their keys are left to macOS.
+    var canSetVolume: Bool { Self.settable(defaultID, kAudioHardwareServiceDeviceProperty_VirtualMainVolume) }
+    var canMute: Bool { Self.settable(defaultID, kAudioDevicePropertyMute) }
+
     func start() {
         guard !started else { return }
         started = true
@@ -109,6 +114,15 @@ final class AudioOutputService {
         if AudioObjectHasProperty(device, &muteAddr), AudioObjectAddPropertyListenerBlock(device, &muteAddr, .main, changed) == noErr {
             muteListener = (device, changed)
         }
+    }
+
+    /// Has the property and can set it. If Core Audio can't say, it's taken as settable.
+    private static func settable(_ id: AudioDeviceID, _ selector: AudioObjectPropertySelector) -> Bool {
+        guard id != 0 else { return false }
+        var addr = address(selector, scope: kAudioDevicePropertyScopeOutput)
+        guard AudioObjectHasProperty(id, &addr) else { return false }
+        var settable: DarwinBoolean = true
+        return AudioObjectIsPropertySettable(id, &addr, &settable) != noErr || settable.boolValue
     }
 
     private static func mute(of id: AudioDeviceID) -> Bool? {
