@@ -64,11 +64,16 @@ struct AlertView: View {
             EmptyView() // drawn by MessageAlertView
         case .agentFinished(let f):
             AgentBadge(agent: f.agent, size: 30).frame(width: 36)
-            titles("\(f.agent.displayName) finished", "\(f.project) · \(IslandFormat.took(f.duration))")
+            if f.needsYou {
+                // "my-app · approve Bash"
+                titles("\(f.agent.displayName) needs you", [f.project, f.reason].compactMap { $0 }.joined(separator: " · "))
+            } else {
+                titles("\(f.agent.displayName) finished", "\(f.project) · \(IslandFormat.took(f.duration))")
+            }
             Spacer()
-            Image(systemName: "checkmark.circle.fill")
+            Image(systemName: f.needsYou ? "hand.raised.circle.fill" : "checkmark.circle.fill")
                 .font(.system(size: 24, weight: .semibold))
-                .foregroundStyle(.green)
+                .foregroundStyle(f.needsYou ? Color.orange : Color.green)
                 .symbolEffect(.bounce, value: alert.id)
         case .updateAvailable(let version):
             symbol("arrow.down.circle.fill", Color.accentColor)

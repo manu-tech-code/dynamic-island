@@ -10,12 +10,17 @@ import Observation
 @Observable
 final class AgentsService: ActivityProvider {
     let kind: ActivityKind = .agents
-    /// Sessions open now, working first, of the agents switched on.
+    /// Sessions open now, of the agents switched on: the ones that need you first, then working.
     private(set) var sessions: [AgentSession] = []
     /// The last week's usage. Filled the first time something shows it.
     private(set) var ledger = AgentLedger()
     /// Agents found on this Mac.
     private(set) var installed: Set<AgentKind> = []
+    /// Where they keep their files.
+    private(set) var folders = AgentFolders(home: AgentLogReader.home)
+    /// Claude Code is signed in to a Claude plan, which counts usage in 5-hour
+    /// windows (with an API key there's no window).
+    private(set) var claudeSubscription = false
     /// Reading the week for the first time.
     private(set) var loading = false
     private(set) var loaded = false
@@ -31,6 +36,11 @@ final class AgentsService: ActivityProvider {
     @ObservationIgnored private var pending: Set<String> = []
     @ObservationIgnored private var readTask: Task<Void, Never>?
     @ObservationIgnored private var sweep: Task<Void, Never>?
+    /// The variables that move the agents' folders: this app's, then your login shell's.
+    @ObservationIgnored private var environment = ProcessInfo.processInfo.environment.filter { AgentFolders.variables.contains($0.key) }
+    /// The watched folders that exist, to notice one appearing.
+    @ObservationIgnored private var watched: [String] = []
+    @ObservationIgnored private var account: (stamp: [Date], value: Bool)?
 
     init(settings: SettingsStore, engine: ActivityEngine) {
         self.settings = settings
@@ -58,27 +68,77 @@ final class AgentsService: ActivityProvider {
             return "\(s[module: .agents].enabled) \(AgentKind.allCases.map { s.agents.isOn($0) })"
         }) { [weak self] _ in self?.update() }
         update()
+        // An app opened from the Dock doesn't see what your shell profile exports,
+        // which can move the agents' folders: asked of your shell, once.
+        Task { [weak self] in
+            let shell = await Task.detached { LoginShell.variables(AgentFolders.variables) }.value
+            guard let self, !shell.isEmpty else { return }
+            self.environment.merge(shell) { $1 }
+            self.detect()
+        }
     }
 
     private var enabled: Bool { settings.settings[module: .agents].enabled }
 
     private func update() {
-        installed = AgentLogReader.installed()
-        if enabled {
-            startLive()
-        } else {
+        sweep?.cancel()
+        sweep = nil
+        guard enabled else {
+            detect()
             liveWatcher = nil
             usageWatcher = nil
-            sweep?.cancel()
-            sweep = nil
             claude = []
             others = []
             sessions = []
             return
         }
+        detect(restart: true)
+        // Now and then: a session whose app quit without tidying up, or one that
+        // went quiet; and, each minute, agents installed since.
+        sweep = Task { [weak self] in
+            var tick = 0
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                guard let self, !Task.isCancelled else { return }
+                tick += 1
+                if !self.sessions.isEmpty {
+                    self.reloadClaude()
+                    self.readCurrent()
+                }
+                if tick % 2 == 0 { self.detect() }
+            }
+        }
+    }
+
+    /// Finds the agents on this Mac and where they keep their files, and
+    /// watches again when that changed: one installed since, or a folder that
+    /// appeared or moved.
+    private func detect(restart: Bool = false) {
+        let found = AgentLogReader.find(environment)
+        let changed = found.folders != folders || found.installed != installed || found.watchable != watched
+        if found.folders != folders { folders = found.folders }
+        if found.installed != installed { installed = found.installed }
+        watched = found.watchable
+        checkAccount()
+        guard enabled, restart || changed else { return }
+        if !restart { Log.info("agents: watching again, found \(installed.map(\.rawValue).sorted())") }
+        liveWatcher = nil
+        usageWatcher = nil
+        startLive()
         if demand > 0 { startUsage() }
         reloadClaude()
-        readNow(Array(shown))
+        readNow(all: demand > 0)
+    }
+
+    /// Whether Claude Code is signed in to a plan, read from its settings when they change.
+    private func checkAccount() {
+        let folders = folders, last = account
+        Task { [weak self] in
+            let result = await Task.detached { AgentLogReader.claudeSubscription(folders, last: last) }.value
+            guard let self else { return }
+            self.account = result
+            if self.claudeSubscription != result.value { self.claudeSubscription = result.value }
+        }
     }
 
     // MARK: open sessions
@@ -87,62 +147,74 @@ final class AgentsService: ActivityProvider {
     /// open and working. Small files, read when they change.
     private func startLive() {
         guard liveWatcher == nil else { return }
-        liveWatcher = FolderWatcher(paths: [AgentLogReader.claudeSessions, AgentLogReader.codexSessions, AgentLogReader.openCodeFolder]) { [weak self] paths in
+        liveWatcher = FolderWatcher(paths: AgentLogReader.livePaths(folders)) { [weak self] paths in
             self?.changed(paths)
-        }
-        // A session whose app quit without tidying up, or one that went quiet: checked now and then.
-        sweep = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(30))
-                guard let self, !self.sessions.isEmpty else { continue }
-                self.reloadClaude()
-                self.readNow([])
-            }
         }
     }
 
     private func changed(_ paths: [String]) {
-        if paths.contains(where: { $0.hasPrefix(AgentLogReader.claudeSessions) }) { reloadClaude() }
-        let rest = paths.filter { !$0.hasPrefix(AgentLogReader.claudeSessions) }
+        let roles = paths.compactMap { path in folders.role(of: path).map { (path, $0) } }
+        if roles.contains(where: { $0.1 == .claudeStatus }) { reloadClaude() }
+        let rest = roles.filter { $0.1 != .claudeStatus }
         guard !rest.isEmpty else { return }
-        pending.formUnion(rest)
+        pending.formUnion(rest.map(\.0))
         // Logs grow a line at a time while an agent works. Codex's and OpenCode's
         // say whether they're working, so they're read within a second; the
         // others only add to the usage, which can wait a few seconds.
         guard readTask == nil else { return }
-        let usageOnly = rest.allSatisfy { $0.hasPrefix(AgentLogReader.claudeProjects) || $0 == AgentLogReader.geminiHistory }
+        let usageOnly = rest.allSatisfy { $0.1 == .claudeLog || $0.1 == .geminiChat || $0.1 == .antigravityHistory }
         readTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(usageOnly ? 5 : 1))
             guard let self else { return }
             let paths = Array(self.pending)
             self.pending = []
-            let snapshot = await self.reader.changed(paths, agents: self.shown)
+            let snapshot = await self.reader.changed(paths, agents: self.shown, in: self.folders)
             self.readTask = nil
             self.apply(snapshot)
         }
     }
 
+    /// Claude Code's sessions: a status file each, while its process runs. A
+    /// file left behind by a process that quit, whose number another process
+    /// now has, is told apart by when that process started.
     private func reloadClaude() {
         guard shown.contains(.claudeCode) else { claude = []; publish(); return }
-        let dir = AgentLogReader.claudeSessions
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []
-        claude = names.filter { $0.hasSuffix(".json") }.compactMap { name in
-            guard let data = FileManager.default.contents(atPath: dir + "/" + name),
-                  let session = ClaudeSessionFile.parse(data), let pid = session.pid, ProcessLookup.isAlive(pid) else { return nil }
-            return session
+        var found: [String: AgentSession] = [:]
+        for dir in folders.claudeSessions {
+            for name in (try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? [] where name.hasSuffix(".json") {
+                guard let data = FileManager.default.contents(atPath: dir + "/" + name),
+                      let parsed = ClaudeSessionFile.parse(data), let pid = parsed.session.pid, ProcessLookup.isAlive(pid),
+                      ClaudeSessionFile.isSameProcess(written: parsed.processStart, running: ProcessLookup.startTime(of: pid),
+                                                      fileWritten: parsed.session.since) else { continue }
+                found[parsed.session.id] = parsed.session
+            }
         }
+        claude = Array(found.values)
         publish()
     }
 
-    private func readNow(_ agents: [AgentKind]) {
+    /// Reads the open sessions (Codex's logs, OpenCode's database), or all the
+    /// usage when something shows it.
+    private func readNow(all: Bool) {
+        let agents = all ? shown : shown.intersection([.codex, .openCode])
+        let folders = folders
         Task { [weak self] in
             guard let self else { return }
-            let snapshot = agents.isEmpty ? await self.reader.current() : await self.reader.refresh(Set(agents).intersection([.codex, .openCode]))
+            let snapshot = await self.reader.refresh(agents, in: folders)
             self.apply(snapshot)
         }
     }
 
+    /// The sessions as last read, checked again (one that went quiet stops working).
+    private func readCurrent() {
+        Task { [weak self] in
+            guard let self else { return }
+            self.apply(await self.reader.current())
+        }
+    }
+
     private func apply(_ snapshot: AgentLogReader.Snapshot) {
+        // Compares the numbers, not the week's replies counted (see AgentLedger's ==).
         if snapshot.ledger != ledger { ledger = snapshot.ledger }
         others = snapshot.sessions
         publish()
@@ -150,23 +222,24 @@ final class AgentsService: ActivityProvider {
 
     private func publish() {
         let on = shown
+        let order: [AgentState: Int] = [.needsYou: 0, .working: 1, .waiting: 2]
         let new = (claude + others).filter { on.contains($0.agent) }.sorted {
-            $0.state != $1.state ? $0.state == .working : $0.since > $1.since
+            $0.state != $1.state ? order[$0.state, default: 2] < order[$1.state, default: 2] : $0.since > $1.since
         }
         guard new != sessions else { return }
-        let finished = AgentFinish.between(sessions, new, now: .now)
+        let stopped = AgentFinish.between(sessions, new)
         sessions = new
         let s = settings.settings.agents
         guard s.alertWhenDone else { return }
-        for f in finished where f.duration >= s.alertMinimumSeconds { confirm(f) }
+        for f in stopped where f.duration >= s.alertMinimumSeconds { confirm(f) }
     }
 
     /// A session can pause between steps: the alert comes only if it's still
-    /// waiting for you a moment later.
+    /// waiting for you (or still asking) a moment later.
     private func confirm(_ finish: AgentFinish) {
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(2))
-            guard let self, self.sessions.first(where: { $0.id == finish.session })?.state == .waiting else { return }
+            guard let self, self.sessions.first(where: { $0.id == finish.session })?.state == (finish.needsYou ? .needsYou : .waiting) else { return }
             self.engine.post(IslandAlert(kind: .agents, style: .agentFinished(finish), holdSeconds: 5))
         }
     }
@@ -179,12 +252,12 @@ final class AgentsService: ActivityProvider {
         demand += 1
         guard demand == 1, enabled else { return }
         startUsage()
-        let agents = shown
+        let agents = shown, folders = folders
         if !loaded { loading = true }
         Task { [weak self] in
             guard let self else { return }
             let started = Date()
-            let snapshot = await self.reader.refresh(agents)
+            let snapshot = await self.reader.refresh(agents, in: folders)
             if !self.loaded { Log.info("agents: read the week in \(Int(Date().timeIntervalSince(started) * 1000)) ms") }
             self.loading = false
             self.loaded = true
@@ -200,7 +273,7 @@ final class AgentsService: ActivityProvider {
 
     private func startUsage() {
         guard usageWatcher == nil else { return }
-        usageWatcher = FolderWatcher(paths: [AgentLogReader.claudeProjects, AgentLogReader.geminiHistory], latency: 1) { [weak self] paths in
+        usageWatcher = FolderWatcher(paths: AgentLogReader.usagePaths(folders), latency: 1) { [weak self] paths in
             self?.changed(paths)
         }
     }
@@ -216,6 +289,12 @@ final class AgentsService: ActivityProvider {
                 return
             }
             pid = ProcessLookup.parent(of: p)
+        }
+        // Codex's and OpenCode's own apps run their sessions away from the project's folder: the app, if it's open.
+        let apps: [AgentKind: String] = [.codex: "Codex", .openCode: "OpenCode"]
+        if let name = apps[session.agent],
+           let app = NSWorkspace.shared.runningApplications.first(where: { $0.localizedName == name && $0.activationPolicy == .regular }) {
+            app.activate()
         }
     }
 }

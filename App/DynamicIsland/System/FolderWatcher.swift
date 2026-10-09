@@ -2,8 +2,9 @@ import CoreServices
 import Foundation
 
 /// Tells which files changed inside some folders (FSEvents), on the main
-/// queue, at most about once per `latency`. Folders that don't exist yet are
-/// skipped. Stops when released.
+/// queue, at most about once per `latency`, naming them with symlinks
+/// resolved. Folders that don't exist yet are skipped: make a new watcher
+/// once they do. Stops when released.
 final class FolderWatcher {
     nonisolated(unsafe) private var stream: FSEventStreamRef?
     private let onChange: ([String]) -> Void
